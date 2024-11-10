@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Raspberry Pi Access Point Configuration System</title>
+</head>
+<body>
+    <h1>Raspberry Pi Access Point Configuration System</h1>
+
+    <p>This system provides a simple way to configure WiFi settings on a Raspberry Pi through a web interface. It creates a temporary access point that users can connect to for configuring their WiFi credentials.</p>
+
+    <h2>System Components</h2>
+    <ol>
+        <li><code>accessPoint.py</code>: Main script that sets up the WiFi access point</li>
+        <li><code>web_config.py</code>: Web server that provides the configuration interface</li>
+        <li><code>config.html</code>: Web interface template for WiFi configuration</li>
+    </ol>
+
+    <h2>How It Works</h2>
+    
+    <h3>1. Initial Setup</h3>
+    <ul>
+        <li>Run the main script: <code>sudo python3 accessPoint.py</code></li>
+        <li>The script monitors GPIO Pin 2 for button press</li>
+        <li>Hold the button for 10 seconds to initiate setup</li>
+    </ul>
+
+    <h3>2. Access Point Creation</h3>
+    <p>When triggered, <code>accessPoint.py</code>:</p>
+    <ul>
+        <li>Sets up a WiFi access point named "shelfWIFI"</li>
+        <li>Configures the network with IP 192.168.4.1</li>
+        <li>Automatically launches the web configuration server</li>
+    </ul>
+
+    <h3>3. Web Configuration</h3>
+    <ul>
+        <li>Connect to the "shelfWIFI" network</li>
+        <li>Navigate to http://192.168.4.1 in your web browser</li>
+        <li>The configuration page provides two options:
+            <ul>
+                <li>Manually enter network credentials</li>
+                <li>Scan for available networks and select one</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li>Raspberry Pi with WiFi capability</li>
+        <li>Python 3.x</li>
+        <li>Required Python packages:
+            <pre>
+sudo pip3 install flask
+sudo pip3 install RPi.GPIO
+sudo pip3 install psutil</pre>
+        </li>
+        <li>Required System Packages:
+            <pre>
+sudo apt-get update
+sudo apt-get install hostapd dnsmasq</pre>
+        </li>
+    </ul>
+
+    <h2>Debugging and Testing</h2>
+
+    <h3>Debug Mode</h3>
+    <ol>
+        <li>Enable Flask Debug Mode:
+            <pre>
+# In web_config.py, modify the app.run() line:
+if __name__ == '__main__':
+    app.run(host='192.168.4.1', port=80, debug=True)</pre>
+        </li>
+        <li>Enable Verbose Logging:
+            <pre>
+# Add to top of accessPoint.py
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='access_point.log')</pre>
+        </li>
+    </ol>
+
+    <h3>Testing Steps</h3>
+    <ol>
+        <li>Test Access Point Setup:
+            <pre>
+# Run with debug output
+sudo python3 -v accessPoint.py
+
+# Monitor system logs
+sudo tail -f /var/log/syslog | grep -E "hostapd|dnsmasq"
+
+# Check network interface
+iwconfig wlan0</pre>
+        </li>
+    </ol>
+
+    <h3>Logging Locations</h3>
+    <ul>
+        <li><code>/var/log/syslog</code> - System logs</li>
+        <li><code>/var/log/hostapd.log</code> - Access point logs</li>
+        <li><code>access_point.log</code> - Application logs</li>
+        <li>Flask debug output in terminal</li>
+    </ul>
+
+    <h2>Known Limitations</h2>
+    <ul>
+        <li>Single-band WiFi support only</li>
+        <li>No HTTPS support</li>
+        <li>Basic authentication</li>
+        <li>Limited error recovery</li>
+        <li>Requires manual initiation</li>
+    </ul>
+
+    <h2>Future Improvements</h2>
+    <ul>
+        <li>HTTPS support</li>
+        <li>Improved security</li>
+        <li>Automatic network detection</li>
+        <li>Status LED indicators</li>
+        <li>Connection quality monitoring</li>
+        <li>Automatic fallback mechanism</li>
+    </ul>
+
+    <h2>Testing Tools</h2>
+    <ul>
+        <li><code>curl</code> - Test web endpoints</li>
+        <li><code>tcpdump</code> - Monitor network traffic</li>
+        <li><code>wireshark</code> - Detailed packet analysis</li>
+        <li><code>htop</code> - Monitor system resources</li>
+    </ul>
+
+    <h2>Common Debug Issues</h2>
+    <ol>
+        <li>Access Point Not Starting:
+            <pre>
+# Check hostapd status
+sudo systemctl status hostapd
+
+# Test hostapd configuration
+sudo hostapd -dd /etc/hostapd/hostapd.conf</pre>
+        </li>
+        <li>Web Server Issues:
+            <pre>
+# Check if port 80 is available
+sudo netstat -tulpn | grep :80
+
+# Test Flask server response
+curl -v http://192.168.4.1</pre>
+        </li>
+        <li>Network Scanning Problems:
+            <pre>
+# Manual network scan
+sudo iwlist wlan0 scan
+
+# Check wireless interface status
+rfkill list all</pre>
+        </li>
+    </ol>
+
+    <h2>Debug Environment Variables</h2>
+    <pre>
+export FLASK_ENV=development
+export FLASK_DEBUG=1
+export PYTHONVERBOSE=1</pre>
+
+    <h2>System Workflow</h2>
+    
+    <h3>Script Interaction</h3>
+    <ol>
+        <li><code>accessPoint.py</code> (Primary Script):
+            <ul>
+                <li>Monitors GPIO button</li>
+                <li>Sets up access point</li>
+                <li>Launches web server automatically</li>
+                <li>Handles cleanup on exit</li>
+            </ul>
+        </li>
+        <li><code>web_config.py</code> (Web Server):
+            <ul>
+                <li>Launched by accessPoint.py</li>
+                <li>Serves configuration interface</li>
+                <li>Handles network scanning</li>
+                <li>Processes WiFi credentials</li>
+            </ul>
+        </li>
+        <li><code>config.html</code> (User Interface):
+            <ul>
+                <li>Provides user input forms</li>
+                <li>Handles network scanning requests</li>
+                <li>Shows connection status</li>
+                <li>Provides feedback to user</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h3>Data Flow</h3>
+    <ol>
+        <li>User presses button → accessPoint.py creates AP</li>
+        <li>accessPoint.py → launches web_config.py</li>
+        <li>User connects to AP → accesses web interface</li>
+        <li>User submits credentials → web_config.py configures WiFi</li>
+        <li>System transitions to new network</li>
+    </ol>
+
+    <h2>Configuration Files</h2>
+    <ul>
+        <li><code>/etc/dhcpcd.conf</code> - Network interface configuration</li>
+        <li><code>/etc/hostapd/hostapd.conf</code> - Access point configuration</li>
+        <li><code>/etc/dnsmasq.conf</code> - DHCP server configuration</li>
+        <li><code>/etc/wpa_supplicant/wpa_supplicant.conf</code> - WiFi client configuration</li>
+    </ul>
+
+    <h2>Backup and Recovery</h2>
+    <p>The system automatically:</p>
+    <ul>
+        <li>Backs up existing network configuration</li>
+        <li>Restores configuration on cleanup</li>
+        <li>Handles unexpected shutdowns</li>
+        <li>Maintains original network settings</li>
+    </ul>
+
+    <h2>Contributing</h2>
+    <ol>
+        <li>Fork the repository</li>
+        <li>Create feature branch</li>
+        <li>Submit pull request</li>
+        <li>Include tests and documentation</li>
+    </ol>
+
+    <h2>License</h2>
+    <p>[Your License Information]</p>
+
+    <h2>Authors</h2>
+    <p>[Your Name/Organization]</p>
+
+    <h2>Acknowledgments</h2>
+    <ul>
+        <li>RPi.GPIO documentation</li>
+        <li>Flask documentation</li>
+        <li>Raspberry Pi networking guides</li>
+    </ul>
+
+</body>
+</html>
