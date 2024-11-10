@@ -41,8 +41,12 @@ When triggered, `accessPoint.py`:
 - Required Python packages:
 '''
 sudo pip3 install flask
+'''
+'''
 sudo pip3 install RPi.GPIO
+'''
 sudo pip3 install psutil
+'''
 
  -Required System Packages:
  '''
