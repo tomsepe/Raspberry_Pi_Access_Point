@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WiFi Configuration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Connect to your WiFi network</h1>
+    <div class="form-group">
+        <label for="ssid">Enter your Network Name:</label>
+        <input type="text" id="ssid" name="ssid">
+    </div>
+    <div class="form-group">
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password">
+    </div>
+    <button onclick="scanNetworks()">Scan for Networks</button>
+
+    <script>
+        function scanNetworks() {
+            fetch('/scan_networks')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.networks) {
+                        const ssid = document.getElementById('ssid');
+                        const networks = data.networks;
+                        const selected = prompt(
+                            'Available networks:\n\n' + 
+                            networks.map((net, i) => `${i + 1}. ${net}`).join('\n') +
+                            '\n\nEnter the number of your network:'
+                        );
+                        if (selected && selected > 0 && selected <= networks.length) {
+                            ssid.value = networks[selected - 1];
+                        }
+                    }
+                })
+                .catch(error => alert('Error scanning networks: ' + error));
+        }
+    </script>
+</body>
+</html>
