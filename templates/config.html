@@ -1,3 +1,25 @@
+<!--
+WiFi Configuration Page Template
+
+This HTML template creates a simple WiFi configuration interface that:
+1. Displays a form for users to enter WiFi credentials
+2. Provides a network scanning feature
+3. Allows users to select from available networks
+4. Styled with embedded CSS for a clean, responsive layout
+
+Features:
+- Network name (SSID) input field
+- Password input field with masked entry
+- "Scan for Networks" button that triggers a network scan
+- JavaScript handling for network scanning and selection
+- Mobile-friendly responsive design
+
+Usage:
+- Served by web_config.py Flask application
+- Accessed at http://192.168.4.1
+- Part of the Raspberry Pi WiFi configuration system
+-->
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -32,39 +54,179 @@
         button:hover {
             background-color: #45a049;
         }
+        .info-text {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #856404;
+        }
+        .section-break {
+            margin: 40px 0 20px 0;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .scan-button {
+            margin-bottom: 25px;
+        }
+        select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <h1>Connect to your WiFi network</h1>
-    <div class="form-group">
-        <label for="ssid">Enter your Network Name:</label>
-        <input type="text" id="ssid" name="ssid">
+    
+    <form id="wifi-form">
+        <div class="form-group">
+            <label for="ssid">Enter your Network Name:</label>
+            <input type="text" id="ssid" name="ssid">
+        </div>
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password">
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+
+    <div class="info-text">
+        <strong>Note:</strong> After submitting, the Raspberry Pi will attempt to connect to your WiFi network. 
+        This will disconnect you from the current network (shelfWIFI) as the device switches to your home network.
     </div>
-    <div class="form-group">
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password">
+
+    <div class="section-break">
+        <h2>Scan for nearby networks</h2>
+        <button onclick="scanNetworks()" class="scan-button">Scan for Networks</button>
+        <div class="form-group">
+            <label for="network-select">Select the WiFi network you want to connect to:</label>
+            <select id="network-select" disabled>
+                <option value="">-- Select a network --</option>
+            </select>
+        </div>
     </div>
-    <button onclick="scanNetworks()">Scan for Networks</button>
 
     <script>
+        // Add form validation
+        document.getElementById('wifi-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const ssid = document.getElementById('ssid').value.trim();
+            const password = document.getElementById('password').value;
+            
+            // Validate inputs
+            if (!ssid) {
+                alert('Please enter a network name (SSID)');
+                return;
+            }
+            if (!password || password.length < 8) {
+                alert('Password must be at least 8 characters long');
+                return;
+            }
+            
+            // Show loading state
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Connecting...';
+            
+            fetch('/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ssid: ssid,
+                    password: password
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert('WiFi credentials submitted successfully. The Raspberry Pi will now attempt to connect to your network. Please wait a few moments while the connection is established.');
+                } else {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+            })
+            .finally(() => {
+                // Reset button state
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            });
+        });
+
+        // Improved network scanning with error handling
         function scanNetworks() {
+            const select = document.getElementById('network-select');
+            const scanButton = document.querySelector('.scan-button');
+            
+            // Show loading state
+            select.disabled = true;
+            scanButton.disabled = true;
+            select.innerHTML = '<option value="">Scanning...</option>';
+            scanButton.textContent = 'Scanning...';
+            
             fetch('/scan_networks')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    if (data.networks) {
-                        const ssid = document.getElementById('ssid');
-                        const networks = data.networks;
-                        const selected = prompt(
-                            'Available networks:\n\n' + 
-                            networks.map((net, i) => `${i + 1}. ${net}`).join('\n') +
-                            '\n\nEnter the number of your network:'
-                        );
-                        if (selected && selected > 0 && selected <= networks.length) {
-                            ssid.value = networks[selected - 1];
-                        }
+                    if (data.networks && data.networks.length > 0) {
+                        select.innerHTML = '<option value="">-- Select a network --</option>';
+                        data.networks.forEach(network => {
+                            const option = document.createElement('option');
+                            option.value = network;
+                            option.textContent = network;
+                            select.appendChild(option);
+                        });
+                    } else {
+                        throw new Error('No networks found');
                     }
                 })
-                .catch(error => alert('Error scanning networks: ' + error));
+                .catch(error => {
+                    alert('Error scanning networks: ' + error.message);
+                    select.innerHTML = '<option value="">-- Select a network --</option>';
+                })
+                .finally(() => {
+                    // Reset states
+                    select.disabled = false;
+                    scanButton.disabled = false;
+                    scanButton.textContent = 'Scan for Networks';
+                });
+        }
+
+        // Update SSID input when network is selected from dropdown
+        document.getElementById('network-select').addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('ssid').value = this.value;
+            }
+        });
+
+        // Add connection status checking
+        function checkConnectionStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.connected) {
+                        alert('Successfully connected to network: ' + data.current_ssid);
+                    }
+                });
         }
     </script>
 </body>
