@@ -64,7 +64,64 @@ app = Flask(__name__)
 def index():
     if not os.path.exists('/etc/hostapd/hostapd.conf'):
         return "Error: Access point is not configured. Please run accessPoint.py first.", 500
-    return render_template('config.html')  # Serve the HTML template
+    try:
+        return render_template('config.html')
+    except:
+        # Fallback HTML if template is missing
+        return '''
+        <html>
+            <head>
+                <title>WiFi Configuration</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    .container { max-width: 600px; margin: 0 auto; }
+                    .form-group { margin-bottom: 15px; }
+                    input { width: 100%; padding: 8px; margin-top: 5px; }
+                    button { padding: 10px 20px; background: #007bff; color: white; border: none; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>WiFi Configuration</h1>
+                    <div class="form-group">
+                        <label for="ssid">Network Name:</label>
+                        <input type="text" id="ssid" name="ssid" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button onclick="submitForm()">Connect</button>
+                    <div id="status"></div>
+                </div>
+                <script>
+                    function submitForm() {
+                        const ssid = document.getElementById('ssid').value;
+                        const password = document.getElementById('password').value;
+                        
+                        fetch('/connect', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                ssid: ssid,
+                                password: password
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('status').innerText = 
+                                data.success ? 'Connected successfully!' : 'Error: ' + data.error;
+                        })
+                        .catch(error => {
+                            document.getElementById('status').innerText = 'Error: ' + error;
+                        });
+                    }
+                </script>
+            </body>
+        </html>
+        '''
 
 # Define route for network scanning endpoint
 @app.route('/scan_networks', methods=['GET'])
@@ -110,6 +167,17 @@ def connect_wifi():
         if not password or len(password) < 8:
             return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
             
+        # Create wpa_supplicant configuration
+        wpa_supplicant_conf = f'''ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=US
+
+network={{
+    ssid="{ssid}"
+    psk="{password}"
+    key_mgmt=WPA-PSK
+}}'''
+
         # Check if wpa_supplicant.conf is writable
         if not os.access('/etc/wpa_supplicant/wpa_supplicant.conf', os.W_OK):
             return jsonify({'success': False, 'error': 'Permission denied: Cannot write to configuration file'}), 403
@@ -146,12 +214,20 @@ def check_ap_running():
         return False
 
 if __name__ == '__main__':
-    if not check_ap_running():
-        print("Error: Access point is not configured. Please run accessPoint.py first.")
+    try:
+        if not check_requirements():
+            print("Missing required packages. Please install them first.")
+            sys.exit(1)
+            
+        if not check_ap_running():
+            print("Error: Access point is not configured. Please run accessPoint.py first.")
+            sys.exit(1)
+        
+        print("Starting web configuration server...")
+        app.run(host='192.168.4.1', port=80, debug=True)
+    except Exception as e:
+        print(f"Failed to start web server: {str(e)}")
         sys.exit(1)
-    
-    print("Starting web configuration server...")
-    app.run(host='192.168.4.1', port=80, debug=True)
 
 # Need to add requirements check
 def check_requirements():

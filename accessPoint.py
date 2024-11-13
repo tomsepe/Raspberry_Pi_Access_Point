@@ -132,21 +132,34 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         print(f"SSID: {AP_SSID}")
         print(f"Password: {AP_PASSWORD}")
         print(f"IP Address: {AP_IP}")
-        return True
         
-    except subprocess.SubprocessError as e:
-        print(f"Command execution error: {str(e)}")
-        return False
-    except IOError as e:
-        print(f"File operation error: {str(e)}")
-        return False
-    except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        return False
+        if setup_successful:
+            # Launch web configuration server
+            print("Starting web configuration server...")
+            try:
+                # Use subprocess to run web_config.py
+                web_process = subprocess.Popen(['sudo', 'python3', 'web_config.py'])
+                
+                # Store the process ID for later cleanup
+                global web_server_process
+                web_server_process = web_process
+                
+                print("Web configuration server started successfully")
+                print("You can now connect to http://192.168.4.1")
+                return True
+            except Exception as e:
+                print(f"Failed to start web configuration server: {str(e)}")
+                return False
 
 def cleanup_ap():
     """Restore original network configuration"""
     try:
+        # Stop web server if it's running
+        global web_server_process
+        if web_server_process:
+            web_server_process.terminate()
+            web_server_process.wait()
+            
         # Stop AP services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
