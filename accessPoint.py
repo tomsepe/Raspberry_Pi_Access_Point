@@ -6,6 +6,8 @@ import signal
 import sys
 import json
 import psutil
+import termios
+import tty  # For keyboard input
 
 # GPIO setup
 BUTTON_PIN = 2  # GPIO Pin 2
@@ -170,11 +172,39 @@ def is_web_server_running():
             return True
     return False
 
+def get_keyboard_input():
+    """Get a single keyboard character without waiting for enter"""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
 def main():
     try:
-        print("Monitoring GPIO Pin 2 for access point setup...")
+        #print("Monitoring GPIO Pin 2 for access point setup...")
+        print("Press 'w' to setup access point (or hold GPIO Pin 2 for hardware trigger)")
+        print("Press 'q' to quit")
+        
         while True:
-            # Check if button is pressed (PIN is LOW)
+            # Check for keyboard input
+            if sys.stdin.isatty():  # Only try to read keyboard if we're in a terminal
+                key = get_keyboard_input()
+                if key == 'w':
+                    print("\nSetting up access point...")
+                    if setup_access_point():
+                        print("Access point and web server are ready")
+                        print("Connect to 'shelfWIFI' network and visit http://192.168.4.1")
+                elif key == 'q':
+                    print("\nExiting program...")
+                    break
+
+            # GPIO input check (commented out but preserved)
+            '''
+             # Check if button is pressed (PIN is LOW)
             if not GPIO.input(BUTTON_PIN):
                 start_time = time.time()
                 
@@ -187,6 +217,7 @@ def main():
                             print("Connect to 'shelfWIFI' network and visit http://192.168.4.1")
                         break
                     time.sleep(0.1)
+            '''
             
             time.sleep(0.1)
             
