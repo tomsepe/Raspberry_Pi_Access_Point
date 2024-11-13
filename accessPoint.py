@@ -154,33 +154,59 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
 def cleanup_ap():
     """Restore original network configuration"""
     try:
-        # Stop web server if it's running
-        global web_server_process
-        if web_server_process:
-            web_server_process.terminate()
-            web_server_process.wait()
-            
-        # Stop AP services
+        print("Cleaning up access point configuration...")
+        
+        # Stop services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
         
         # Restore network interface
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'])
         time.sleep(1)
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
         
-        # Restart normal networking
+        # Restore original configuration files
+        if os.path.exists('/etc/dhcpcd.conf.backup'):
+            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'])
+        else:
+            # Write default dhcpcd.conf if backup doesn't exist
+            with open('/etc/dhcpcd.conf', 'w') as f:
+                f.write('''# Default dhcpcd.conf
+hostname
+clientid
+persistent
+option rapid_commit
+option domain_name_servers, domain_name, domain_search, host_name
+option classless_static_routes
+option interface_mtu
+require dhcp_server_identifier
+slaac private''')
+        
+        # Restore dnsmasq if backup exists
+        if os.path.exists('/etc/dnsmasq.conf.backup'):
+            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'])
+        
+        # Enable and restart networking services
+        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
+        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
+        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
+        
+        # Bring interface back up
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
-        subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'])
+        
+        print("Cleanup completed. Network configuration restored.")
         
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
 
+# Add this to handle program exit
 def signal_handler(signum, frame):
+    """Handle cleanup on program termination"""
+    print("\nReceived termination signal. Cleaning up...")
     cleanup_ap()
-    GPIO.cleanup()
     sys.exit(0)
 
+# Register the signal handlers
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
@@ -209,7 +235,6 @@ def get_keyboard_input():
 
 def main():
     try:
-        #print("Monitoring GPIO Pin 2 for access point setup...")
         print("Press 'w' to setup access point (or hold GPIO Pin 2 for hardware trigger)")
         print("Press 'q' to quit")
         
@@ -224,6 +249,7 @@ def main():
                         print("Connect to 'shelfWIFI' network and visit http://192.168.4.1")
                 elif key == 'q':
                     print("\nExiting program...")
+                    cleanup_ap()  # Ensure cleanup runs before exit
                     break
 
             # GPIO input check (commented out but preserved)

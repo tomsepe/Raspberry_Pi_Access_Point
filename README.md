@@ -16,6 +16,14 @@ sudo apt-get update
 sudo apt-get install -y hostapd dnsmasq dhcpcd5
 sudo systemctl unmask hostapd
 '''
+
+'''
+sudo systemctl unmask wpa_supplicant
+sudo systemctl enable wpa_supplicant
+sudo systemctl start wpa_supplicant
+sudo systemctl restart dhcpcd
+sudo systemctl restart lightdm  # This should restart your desktop environment
+'''
 - Run the main script: `sudo python3 accessPoint.py`
 - The script monitors GPIO Pin 2 for button press
 - Hold the button for 10 seconds to initiate setup
