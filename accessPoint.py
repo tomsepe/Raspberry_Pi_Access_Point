@@ -30,41 +30,28 @@ def setup_access_point():
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
 
-        # Check if required packages are available
-        for package in ['hostapd', 'dnsmasq']:
-            result = subprocess.run(['dpkg', '-s', package], capture_output=True, text=True)
-            if result.returncode != 0:
-                print(f"Installing {package}...")
-                subprocess.run(['sudo', 'apt-get', 'update'])
-                result = subprocess.run(['sudo', 'apt-get', 'install', '-y', package])
-                if result.returncode != 0:
-                    raise RuntimeError(f"Failed to install {package}")
-
-        # Backup existing configurations
-        config_files = [
-            '/etc/dhcpcd.conf',
-            '/etc/hostapd/hostapd.conf',
-            '/etc/default/hostapd',
-            '/etc/dnsmasq.conf'
-        ]
-        for file in config_files:
-            if os.path.exists(file):
-                backup_file = f"{file}.backup"
-                subprocess.run(['sudo', 'cp', file, backup_file])
-
         # Install required packages if not already installed
+        print("Checking and installing required packages...")
         subprocess.run(['sudo', 'apt-get', 'update'])
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq'])
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq', 'dhcpcd5'])
         
-        # Stop services temporarily
+        # Stop services before configuration
+        print("Stopping services...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'])
+        
+        # Unmask hostapd if it was masked
+        print("Unmasking hostapd...")
+        subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'])
         
         # Configure static IP
+        print("Configuring static IP...")
         with open('/etc/dhcpcd.conf', 'a') as f:
             f.write('\ninterface wlan0\n    static ip_address=192.168.4.1/24\n    nohook wpa_supplicant\n')
         
         # Configure hostapd
+        print("Configuring hostapd...")
         hostapd_conf = '''interface=wlan0
 driver=nl80211
 ssid=shelfWIFI
@@ -88,44 +75,35 @@ rsn_pairwise=CCMP'''
             f.write('DAEMON_CONF="/etc/hostapd/hostapd.conf"')
             
         # Configure DHCP server (dnsmasq)
+        print("Configuring DHCP server...")
         dnsmasq_conf = '''interface=wlan0
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         
         with open('/etc/dnsmasq.conf', 'w') as f:
             f.write(dnsmasq_conf)
             
-        # Enable and start services
-        subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'])
+        # Start services in correct order
+        print("Starting services...")
+        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
+        time.sleep(2)  # Give dhcpcd time to start
+        
         subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'])
-        subprocess.run(['sudo', 'systemctl', 'enable', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'])
+        time.sleep(2)  # Give hostapd time to start
+        
+        # Check hostapd status
+        result = subprocess.run(['sudo', 'systemctl', 'status', 'hostapd'], capture_output=True, text=True)
+        if "active (running)" not in result.stdout:
+            print("Warning: hostapd service not running properly")
+            print("hostapd status:", result.stdout)
+            return False
+            
+        subprocess.run(['sudo', 'systemctl', 'enable', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
         
-        # Restart dhcpcd
-        subprocess.run(['sudo', 'service', 'dhcpcd', 'restart'])
-        
         print("Access point setup complete!")
+        return True
         
-        if setup_successful:
-            # Launch web configuration server
-            print("Starting web configuration server...")
-            try:
-                # Use subprocess to run web_config.py
-                web_process = subprocess.Popen(['sudo', 'python3', 'web_config.py'])
-                
-                # Store the process ID for later cleanup
-                global web_server_process
-                web_server_process = web_process
-                
-                print("Web configuration server started successfully")
-                return True
-            except Exception as e:
-                print(f"Failed to start web configuration server: {str(e)}")
-                return False
-                
-    except PermissionError as e:
-        print(f"Permission error: {str(e)}")
-        return False
     except subprocess.SubprocessError as e:
         print(f"Command execution error: {str(e)}")
         return False
