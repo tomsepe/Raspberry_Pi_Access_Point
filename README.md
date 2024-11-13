@@ -11,6 +11,11 @@ This system provides a simple way to configure WiFi settings on a Raspberry Pi t
 ## How It Works
 
 ### 1. Initial Setup
+'''
+sudo apt-get update
+sudo apt-get install -y hostapd dnsmasq dhcpcd5
+sudo systemctl unmask hostapd
+'''
 - Run the main script: `sudo python3 accessPoint.py`
 - The script monitors GPIO Pin 2 for button press
 - Hold the button for 10 seconds to initiate setup

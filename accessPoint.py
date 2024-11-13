@@ -17,7 +17,7 @@ GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 # Should define constants at top of file
 WIFI_INTERFACE = 'wlan0'
 AP_SSID = 'shelfWIFI'
-AP_PASSWORD = '1234'
+AP_PASSWORD = '12345678'
 AP_IP = '192.168.4.1'
 
 # Add global variable for web server process
@@ -30,31 +30,48 @@ def setup_access_point():
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
 
-        # Install required packages if not already installed
+        # Install required packages first while we still have internet
         print("Checking and installing required packages...")
         subprocess.run(['sudo', 'apt-get', 'update'])
         subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq', 'dhcpcd5'])
         
+        # Now disconnect from existing WiFi
+        print("Disconnecting from any existing WiFi networks...")
+        subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'mask', 'wpa_supplicant'], check=True)  # Prevent automatic restart
+        time.sleep(2)  # Give time for network to disconnect
+
         # Stop services before configuration
         print("Stopping services...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'])
         
-        # Unmask hostapd if it was masked
-        print("Unmasking hostapd...")
+        # Unmask and enable hostapd
+        print("Configuring hostapd service...")
         subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'])
+        subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'])
         
-        # Configure static IP
+        # Backup and configure static IP
         print("Configuring static IP...")
-        with open('/etc/dhcpcd.conf', 'a') as f:
-            f.write('\ninterface wlan0\n    static ip_address=192.168.4.1/24\n    nohook wpa_supplicant\n')
+        if os.path.exists('/etc/dhcpcd.conf'):
+            subprocess.run(['sudo', 'cp', '/etc/dhcpcd.conf', '/etc/dhcpcd.conf.backup'])
+        
+        dhcpcd_conf = f'''
+interface {WIFI_INTERFACE}
+    static ip_address={AP_IP}/24
+    nohook wpa_supplicant
+'''
+        with open('/etc/dhcpcd.conf', 'w') as f:
+            f.write(dhcpcd_conf)
         
         # Configure hostapd
         print("Configuring hostapd...")
-        hostapd_conf = '''interface=wlan0
+        hostapd_conf = f'''interface={WIFI_INTERFACE}
 driver=nl80211
-ssid=shelfWIFI
+ssid={AP_SSID}
 hw_mode=g
 channel=7
 wmm_enabled=0
@@ -62,7 +79,7 @@ macaddr_acl=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
-wpa_passphrase=1234
+wpa_passphrase={AP_PASSWORD}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP'''
@@ -76,20 +93,22 @@ rsn_pairwise=CCMP'''
             
         # Configure DHCP server (dnsmasq)
         print("Configuring DHCP server...")
-        dnsmasq_conf = '''interface=wlan0
+        dnsmasq_conf = f'''interface={WIFI_INTERFACE}
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         
         with open('/etc/dnsmasq.conf', 'w') as f:
             f.write(dnsmasq_conf)
             
-        # Start services in correct order
+        # Bring up interface and start services in correct order
         print("Starting services...")
-        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
-        time.sleep(2)  # Give dhcpcd time to start
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=True)
+        time.sleep(2)
         
-        subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'])
+        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
+        time.sleep(2)
+        
         subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'])
-        time.sleep(2)  # Give hostapd time to start
+        time.sleep(2)
         
         # Check hostapd status
         result = subprocess.run(['sudo', 'systemctl', 'status', 'hostapd'], capture_output=True, text=True)
@@ -98,10 +117,21 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
             print("hostapd status:", result.stdout)
             return False
             
-        subprocess.run(['sudo', 'systemctl', 'enable', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
         
+        # Verify AP is broadcasting
+        print("Verifying access point...")
+        time.sleep(2)
+        result = subprocess.run(['iwconfig', WIFI_INTERFACE], capture_output=True, text=True)
+        if "Mode:Master" not in result.stdout:
+            print("Warning: Access point mode not active")
+            print("Interface status:", result.stdout)
+            return False
+            
         print("Access point setup complete!")
+        print(f"SSID: {AP_SSID}")
+        print(f"Password: {AP_PASSWORD}")
+        print(f"IP Address: {AP_IP}")
         return True
         
     except subprocess.SubprocessError as e:
@@ -117,16 +147,19 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
 def cleanup_ap():
     """Restore original network configuration"""
     try:
-        # Stop web server if it's running
-        if web_server_process:
-            web_server_process.terminate()
-            web_server_process.wait()
-            
-        for file in config_files:
-            backup_file = f"{file}.backup"
-            if os.path.exists(backup_file):
-                subprocess.run(['sudo', 'cp', backup_file, file])
-
+        # Stop AP services
+        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
+        
+        # Restore network interface
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'])
+        time.sleep(1)
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
+        
+        # Restart normal networking
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
+        subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'])
+        
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
 
