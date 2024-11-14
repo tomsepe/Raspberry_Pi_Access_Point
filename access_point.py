@@ -29,6 +29,9 @@ def setup_access_point():
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
 
+        # Stop admin panel first to free up port 80
+        stop_admin_panel()
+        
         print("Stopping network services...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'NetworkManager'], check=False)
         subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=True)
@@ -56,6 +59,9 @@ def setup_access_point():
         # Start dnsmasq
         print("Starting dnsmasq...")
         subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
+        
+        # Stop any process using port 80
+        stop_web_server()
         
         # Start web server
         print("\nStarting web configuration server...")
@@ -204,6 +210,14 @@ country_code=US
     except Exception as e:
         print(f"Error managing hostapd configuration: {str(e)}")
         return False
+
+def stop_web_server():
+    """Stop any running web servers on port 80"""
+    try:
+        subprocess.run(['sudo', 'fuser', '-k', '80/tcp'], check=False)
+        time.sleep(2)  # Give time for the server to stop
+    except Exception as e:
+        print(f"Error stopping web server: {str(e)}")
 
 # Main Program
 def main():
