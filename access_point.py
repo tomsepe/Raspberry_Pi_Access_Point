@@ -176,6 +176,7 @@ def cleanup_ap():
         
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
+        return False
 
 # Signal and Status Handling
 def signal_handler(signum, frame):
