@@ -10,8 +10,10 @@
 
     <h2>System Components</h2>
     <ol>
+        <li><code>install.py</code>: Installation script that sets up required packages and directories</li>
         <li><code>access_point.py</code>: Main script that sets up the WiFi access point</li>
         <li><code>web_config.py</code>: Web server that provides the configuration interface</li>
+        <li><code>recover.py</code>: Recovery script to restore system to original state if needed</li>
         <li><code>config.html</code>: Web interface template for WiFi configuration</li>
         <li><code>admin/admin_server.py</code>: Admin interface server that runs after configuration</li>
         <li><code>admin/templates/admin.html</code>: Admin panel interface template</li>
@@ -21,9 +23,14 @@
     
     <h3>1. Initial Setup</h3>
     <ul>
+        <li>Install the system: <code>sudo python3 install.py</code></li>
         <li>Run the main script: <code>sudo python3 access_point.py</code></li>
-        <li>The script monitors GPIO Pin 2 for button press</li>
-        <li>Hold the button for 10 seconds to initiate setup</li>
+        <li>Two ways to initiate setup:
+            <ul>
+                <li>Press 'w' key to start access point setup</li>
+                <li>Hold GPIO Pin 2 for 10 seconds (hardware trigger)</li>
+            </ul>
+        </li>
     </ul>
 
     <h3>2. Access Point Creation</h3>
@@ -50,16 +57,18 @@
     <ul>
         <li>Raspberry Pi with WiFi capability</li>
         <li>Python 3.x</li>
-        <li>Required Python packages:
-            <pre>
-sudo pip3 install flask
-sudo pip3 install RPi.GPIO
-sudo pip3 install psutil</pre>
-        </li>
-        <li>Required System Packages:
-            <pre>
-sudo apt-get update
-sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
+        <li>Required packages (automatically installed by install.py):
+            <ul>
+                <li>hostapd</li>
+                <li>dnsmasq</li>
+                <li>dhcpcd5</li>
+                <li>python3-flask</li>
+                <li>python3-pip</li>
+                <li>python3-rpi.gpio</li>
+                <li>net-tools</li>
+                <li>fuser</li>
+                <li>wpasupplicant</li>
+            </ul>
         </li>
     </ul>
 
@@ -81,47 +90,35 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
 
     <h2>Debugging and Testing</h2>
 
-    <h3>Debug Mode</h3>
-    <ol>
-        <li>Enable Flask Debug Mode:
-            <pre>
-    # In web_config.py, modify the app.run() line:
-    if __name__ == '__main__':
-        app.run(host='192.168.4.1', port=80, debug=True)</pre>
-        </li>
-        <li>Enable Verbose Logging:
-            <pre>
-    # Add to top of access_point.py
-    import logging
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        filename='access_point.log')</pre>
-        </li>
-    </ol>
-
-    <h3>Testing Steps</h3>
-    <ol>
-        <li>Test Access Point Setup:
-            <pre>
-    # Run with debug output
-    sudo python3 -v access_point.py
-
-    # Monitor system logs
-    sudo tail -f /var/log/syslog | grep -E "hostapd|dnsmasq"
-
-    # Check network interface
-    iwconfig wlan0</pre>
-        </li>
-    </ol>
-
-    <h3>Logging Locations</h3>
+    <h3>Log Files</h3>
+    <p>All logs are stored in the logs directory:</p>
     <ul>
-        <li><code>/var/log/syslog</code> - System logs</li>
-        <li><code>/var/log/hostapd.log</code> - Access point logs</li>
-        <li><code>access_point.log</code> - Application logs</li>
-        <li>Flask debug output in terminal</li>
+        <li><code>logs/access_point.log</code> - Main application logs</li>
+        <li><code>logs/wifi_config.log</code> - Web configuration server logs</li>
+        <li><code>logs/admin_server.log</code> - Admin panel logs</li>
+        <li><code>logs/recovery.log</code> - Recovery operation logs</li>
     </ul>
+
+    <h3>Common Issues</h3>
+    <ol>
+        <li>Port 80 Already in Use:
+            <pre>
+# Check what's using port 80
+sudo lsof -i :80
+
+# Stop admin panel if running
+sudo systemctl stop pi-admin-panel</pre>
+        </li>
+        <li>Access Point Not Starting:
+            <pre>
+# Check service status
+sudo systemctl status hostapd
+sudo systemctl status dnsmasq
+
+# Run recovery script if needed
+sudo python3 recover.py</pre>
+        </li>
+    </ol>
 
     <h2>Known Limitations</h2>
     <ul>
@@ -188,20 +185,34 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     
     <h3>System Workflow</h3>
     <ol>
-        <li>Initial Configuration:
+        <li>Installation:
             <ul>
-                <li>User presses button → access_point.py creates AP</li>
-                <li>access_point.py → launches web_config.py</li>
-                <li>User connects to AP → accesses web interface</li>
-                <li>User submits credentials → web_config.py configures WiFi</li>
+                <li>Run install.py to set up system</li>
+                <li>Creates necessary directories and sets permissions</li>
+                <li>Installs required packages</li>
+                <li>Backs up existing network configuration</li>
             </ul>
         </li>
-        <li>Admin Interface:
+        <li>Normal Operation:
             <ul>
+                <li>Admin panel runs on port 80</li>
                 <li>System connects to configured WiFi</li>
-                <li>web_config.py creates and starts pi-admin-panel service</li>
-                <li>Admin interface accessible at http://raspberrypi.local</li>
-                <li>Interface shows system status and metrics</li>
+                <li>Monitors system status</li>
+            </ul>
+        </li>
+        <li>Configuration Mode:
+            <ul>
+                <li>Triggered by 'w' key or GPIO button</li>
+                <li>Stops admin panel service</li>
+                <li>Creates access point</li>
+                <li>Runs configuration web server</li>
+            </ul>
+        </li>
+        <li>Recovery:
+            <ul>
+                <li>recover.py available if needed</li>
+                <li>Restores original configuration</li>
+                <li>Resets all services</li>
             </ul>
         </li>
     </ol>
@@ -265,14 +276,21 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     <h2>Directory Structure</h2>
     <pre>
     project_root/
+    ├── install.py
     ├── access_point.py
     ├── web_config.py
+    ├── recover.py
     ├── templates/
     │   └── config.html
     ├── admin/
     │   ├── admin_server.py
     │   └── templates/
     │       └── admin.html
+    ├── logs/
+    │   ├── access_point.log
+    │   ├── wifi_config.log
+    │   ├── admin_server.log
+    │   └── recovery.log
     └── README.html
     </pre>
 
@@ -290,6 +308,97 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     # Check avahi-daemon status
     sudo systemctl status avahi-daemon
     </pre>
+
+    <h2>Installation</h2>
+    <ol>
+        <li>Clone the repository:
+            <pre>git clone [repository-url]</pre>
+        </li>
+        <li>Run the installation script:
+            <pre>sudo python3 install.py</pre>
+            This will:
+            <ul>
+                <li>Install all required system packages</li>
+                <li>Create necessary directories</li>
+                <li>Set correct permissions</li>
+                <li>Backup existing network configurations</li>
+                <li>Create log directory</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Recovery</h2>
+    <p>If something goes wrong with the configuration or you need to restore the original network settings:</p>
+    <ol>
+        <li>Run the recovery script:
+            <pre>sudo python3 recover.py</pre>
+        </li>
+        <li>The script will:
+            <ul>
+                <li>Stop all access point services</li>
+                <li>Restore original network configuration files</li>
+                <li>Reset the WiFi interface</li>
+                <li>Restore the desktop environment if needed</li>
+                <li>Clean up any temporary files</li>
+                <li>Stop and remove the admin panel service</li>
+            </ul>
+        </li>
+        <li>Reboot your system after recovery:
+            <pre>sudo reboot</pre>
+        </li>
+    </ol>
+
+    <h2>Admin Panel Service</h2>
+    <p>The admin panel service is automatically created and managed by web_config.py. The service file is created at:</p>
+    <pre>/etc/systemd/system/pi-admin-panel.service</pre>
+
+    <p>Service Configuration:</p>
+    <pre>
+    [Unit]
+    Description=Pi Admin Panel
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/python3 /path/to/admin/admin_server.py
+    WorkingDirectory=/path/to/admin
+    User=root
+    Restart=always
+    RestartSec=3
+
+    [Install]
+    WantedBy=multi-user.target
+    </pre>
+
+    <p>Service Management:</p>
+    <pre>
+    sudo systemctl status pi-admin-panel    # Check status
+    sudo systemctl start pi-admin-panel     # Start service
+    sudo systemctl stop pi-admin-panel      # Stop service
+    sudo systemctl restart pi-admin-panel   # Restart service
+    sudo systemctl enable pi-admin-panel    # Enable on boot
+    </pre>
+
+    <h2>Port Management</h2>
+    <p>The system manages port 80 between two services:</p>
+    <ul>
+        <li>Admin Panel (normal operation)</li>
+        <li>WiFi Configuration Server (during setup)</li>
+    </ul>
+    <p>When switching to access point mode:</p>
+    <ol>
+        <li>The system automatically stops the admin panel service</li>
+        <li>Frees up port 80 for the configuration interface</li>
+        <li>Restarts the admin panel service after configuration is complete</li>
+    </ol>
+
+    <h2>GPIO Configuration</h2>
+    <p>The system uses GPIO Pin 2 (BCM numbering) for hardware trigger:</p>
+    <ul>
+        <li>Pin is configured with internal pull-up resistor</li>
+        <li>Button should connect pin to ground when pressed</li>
+        <li>Hold for 10 seconds to trigger access point setup</li>
+        <li>GPIO functionality can be enabled/disabled in access_point.py</li>
+    </ul>
 
 </body>
 </html>
