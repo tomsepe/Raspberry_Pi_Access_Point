@@ -319,6 +319,14 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
+def stop_web_server():
+    """Stop any running web servers on port 80"""
+    try:
+        subprocess.run(['sudo', 'fuser', '-k', '80/tcp'], check=False)
+        time.sleep(2)  # Give time for the server to stop
+    except Exception as e:
+        print(f"Error stopping web server: {str(e)}")
+
 def setup_admin_server():
     """Setup and start the admin server"""
     try:
@@ -326,8 +334,16 @@ def setup_admin_server():
         # Ensure avahi-daemon is installed
         subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
         
+        # Stop any existing web servers
+        stop_web_server()
+        
+        # Get the current script's directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        admin_dir = os.path.join(current_dir, 'admin')
+        
         # Start admin server in a new process
-        subprocess.Popen(['sudo', 'python3', 'admin_server.py'])
+        subprocess.Popen(['sudo', 'python3', 'admin_server.py'], 
+                        cwd=admin_dir)
         
         # Stop the current (config) server
         print("Stopping config server...")
