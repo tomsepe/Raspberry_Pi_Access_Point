@@ -126,6 +126,10 @@ def setup_access_point():
         except Exception as e:
             print(f"Unexpected error: {str(e)}")
             return False
+            
+    except Exception as e:
+        print(f"Error in setup_access_point: {str(e)}")
+        return False
 
 def cleanup_ap():
     """Restore original network configuration"""
