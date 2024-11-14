@@ -44,20 +44,9 @@ def setup_access_point():
         
         print("Reconfiguring wireless interface...")
         # Force disconnect from any networks
-        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'essid', 'off'], check=False)
-        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Managed'], check=False)
-        
-        # Reset interface completely
         subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=True)
         time.sleep(1)
-        
-        # Try to force AP mode
-        subprocess.run(['sudo', 'iw', WIFI_INTERFACE, 'set', 'type', 'AP'], check=False)
-        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Master'], check=True)
-        time.sleep(2)
-        
-        # Rest of your existing configuration code...
         
         # Modified service start sequence
         print("Starting services...")
@@ -69,10 +58,14 @@ def setup_access_point():
         subprocess.run(['sudo', 'ip', 'addr', 'add', f'{AP_IP}/24', 'dev', WIFI_INTERFACE], check=True)
         time.sleep(1)
         
+        # Ensure hostapd is unmasked and enabled
+        subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'], check=False)
+        
         subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
         time.sleep(2)
         
-        # Start hostapd with debug output
+        # Start hostapd as a service instead of direct
         print("Starting hostapd...")
         try:
             hostapd_output = subprocess.run(
