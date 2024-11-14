@@ -25,28 +25,71 @@ def check_root():
         print("This script must be run as root (sudo)")
         sys.exit(1)
 
+def check_environment():
+    """Check if system is running headless or with desktop"""
+    try:
+        # Check if X server is running
+        result = subprocess.run(['pidof', 'X'], capture_output=True)
+        has_display = result.returncode == 0
+        
+        if has_display:
+            print("Detected desktop environment")
+        else:
+            print("Detected headless environment")
+            
+        return has_display
+    except Exception as e:
+        print(f"Warning: Could not determine environment type: {str(e)}")
+        return False
+
+def check_gpio_package():
+    """Check if RPI.GPIO is already installed"""
+    try:
+        import RPi.GPIO
+        print("RPI.GPIO is already installed")
+        return True
+    except ImportError:
+        return False
+
 def install_packages():
     """Install required system packages"""
+    # Core packages needed for both headless and desktop operation
     required_packages = [
         'hostapd',
         'dnsmasq',
         'dhcpcd5',
         'python3-flask',
         'python3-pip',
-        'python3-rpi.gpio',
         'net-tools',  # For network utilities like ifconfig
-        'fuser',      # For port management
         'wpasupplicant'  # For WiFi client mode
     ]
     
     try:
+        print("Testing internet connectivity...")
+        test = subprocess.run(['ping', '-c', '1', '8.8.8.8'], capture_output=True)
+        if test.returncode != 0:
+            print("Error: No internet connection detected")
+            print("Please ensure you have a working internet connection")
+            return False
+
         print("Updating package lists...")
         subprocess.run(['apt-get', 'update'], check=True)
         
-        print("\nInstalling required packages...")
+        # Install main packages
+        print("\nInstalling main packages...")
         for package in required_packages:
             print(f"Installing {package}...")
             subprocess.run(['apt-get', 'install', '-y', package], check=True)
+        
+        # Check and handle GPIO package
+        if not check_gpio_package():
+            print("\nRPI.GPIO not found, attempting to install...")
+            try:
+                subprocess.run(['pip3', 'install', 'RPI.GPIO'], check=True)
+                print("Successfully installed RPI.GPIO")
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Could not install RPI.GPIO: {str(e)}")
+                print("GPIO functionality may be limited")
             
         print("\nInstalling Python requirements...")
         subprocess.run(['pip3', 'install', 'psutil'], check=True)
@@ -64,7 +107,6 @@ def verify_directories():
             'admin',
             'admin/templates',
             'templates',
-            'static',
             'logs'
         ]
         
@@ -198,6 +240,9 @@ def main():
     
     # Check for root privileges
     check_root()
+    
+    # Check environment type (headless vs desktop)
+    check_environment()
     
     # Verify repository structure
     if not verify_directories():
