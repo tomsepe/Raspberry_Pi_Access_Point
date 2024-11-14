@@ -190,14 +190,12 @@ network={{
     key_mgmt=WPA-PSK
 }}'''
         
-        # Write the configuration directly
+        # Write the configuration
         try:
-            # Write to temporary file first
             temp_file = '/tmp/wpa_supplicant.conf.tmp'
             with open(temp_file, 'w') as f:
                 f.write(config_text)
             
-            # Move temp file to final location and set permissions
             subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             
@@ -207,8 +205,25 @@ network={{
                 os.remove(temp_file)
             raise e
         
-        # Restart the wireless interface
-        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=True)
+        # Stop the AP and reconfigure wireless
+        try:
+            # Stop hostapd and dnsmasq
+            subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
+            
+            # Bring down the interface
+            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
+            
+            # Stop wpa_supplicant
+            subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
+            time.sleep(1)
+            
+            # Start wpa_supplicant
+            subprocess.run(['sudo', 'wpa_supplicant', '-B', '-i', 'wlan0', '-c', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
+            
+        except Exception as e:
+            app.logger.error(f"Error stopping wpa_supplicant: {str(e)}")
+            raise e
         
         # Wait for connection
         time.sleep(5)
