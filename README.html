@@ -400,5 +400,99 @@ sudo python3 recover.py</pre>
         <li>GPIO functionality can be enabled/disabled in access_point.py</li>
     </ul>
 
+    <h2>Configuration Interface (config.html)</h2>
+    <p>The configuration interface is served when users connect to the access point. Located at <code>templates/config.html</code>, it provides:</p>
+
+    <h3>Features</h3>
+    <ul>
+        <li>WiFi Network Configuration:
+            <ul>
+                <li>Network scanning capability</li>
+                <li>Display of available networks with signal strength</li>
+                <li>Manual network credential entry</li>
+                <li>Password validation</li>
+            </ul>
+        </li>
+        <li>User Interface Elements:
+            <ul>
+                <li>Network selection dropdown</li>
+                <li>Manual SSID input field</li>
+                <li>Password input field</li>
+                <li>"Scan Networks" button</li>
+                <li>"Connect" button</li>
+                <li>Status messages area</li>
+            </ul>
+        </li>
+        <li>Real-time Feedback:
+            <ul>
+                <li>Connection status updates</li>
+                <li>Error messages</li>
+                <li>Success confirmation</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>Usage</h3>
+    <ol>
+        <li>Connect to "PiConfigWiFi" network</li>
+        <li>Navigate to http://192.168.4.1</li>
+        <li>Either:
+            <ul>
+                <li>Click "Scan Networks" to see available WiFi networks</li>
+                <li>Or manually enter your network SSID</li>
+            </ul>
+        </li>
+        <li>Enter the network password</li>
+        <li>Click "Connect" to apply settings</li>
+    </ol>
+
+    <h3>Template Location</h3>
+    <pre>
+    project_root/
+    └── templates/
+        └── config.html    # WiFi configuration interface template
+    </pre>
+
+    <h3>API Endpoints</h3>
+    <p>The template interacts with these endpoints (defined in web_config.py):</p>
+    <ul>
+        <li><code>/scan</code> - GET request to scan for available networks</li>
+        <li><code>/connect</code> - POST request to connect to selected network</li>
+        <li><code>/status</code> - GET request to check connection status</li>
+    </ul>
+
+    <h3>JavaScript Functions</h3>
+    <ul>
+        <li><code>scanNetworks()</code> - Initiates network scan</li>
+        <li><code>connectToNetwork()</code> - Submits connection credentials</li>
+        <li><code>checkStatus()</code> - Polls connection status</li>
+        <li><code>updateStatus()</code> - Updates status display</li>
+    </ul>
+
+    <h3>Styling</h3>
+    <p>The interface includes responsive CSS for:</p>
+    <ul>
+        <li>Mobile and desktop compatibility</li>
+        <li>Clear status messages</li>
+        <li>User-friendly form layout</li>
+        <li>Loading indicators</li>
+    </ul>
+
+    <h3>Error Handling</h3>
+    <ul>
+        <li>Invalid password length</li>
+        <li>Network scan failures</li>
+        <li>Connection timeouts</li>
+        <li>Server communication errors</li>
+    </ul>
+
+    <h3>Security Notes</h3>
+    <ul>
+        <li>Passwords are transmitted over HTTP (not HTTPS)</li>
+        <li>Interface only available during configuration mode</li>
+        <li>No persistent storage of credentials</li>
+        <li>Session-based operation only</li>
+    </ul>
+
 </body>
 </html>
