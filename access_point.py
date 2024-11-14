@@ -85,11 +85,17 @@ def cleanup_ap():
         # Reset network interface
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=False)
         time.sleep(1)
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=False)
         
-        # Restore network services
-        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        # Start necessary services in correct order
+        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
         subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        
+        # Bring interface back up
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=False)
+        time.sleep(2)
+        
+        # Final networking restart to ensure everything is working
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
         
         print("Cleanup completed")

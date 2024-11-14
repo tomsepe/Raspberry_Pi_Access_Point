@@ -224,7 +224,6 @@ network={{
             print("\n3. Stopping network services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'], check=True)
             print("   Services stopped")
             
             print("\n4. Reconfiguring network interface...")
