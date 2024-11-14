@@ -172,6 +172,16 @@ def cleanup_ap():
     """Restore original network configuration"""
     print("Cleaning up access point configuration...")
     try:
+        # Stop web server if running
+        global web_server_process
+        if web_server_process:
+            try:
+                web_server_process.terminate()
+                web_server_process.wait(timeout=5)
+            except:
+                pass
+            web_server_process = None
+
         # Stop AP services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
@@ -183,7 +193,7 @@ def cleanup_ap():
         if os.path.exists('/etc/dnsmasq.conf.backup'):
             subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'])
             
-        # Restore wpa_supplicant
+        # Restore wpa_supplicant without affecting display manager
         subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
         subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
         subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
@@ -193,13 +203,16 @@ def cleanup_ap():
         time.sleep(1)
         subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'])
         
-        # Restart networking
+        # Restart only networking services
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'])
         
-        # Clean up GPIO
-        GPIO.cleanup()
-        
+        # Clean up GPIO safely
+        try:
+            GPIO.cleanup()
+        except:
+            pass
+            
         print("Cleanup completed. Original network configuration restored.")
         
     except Exception as e:

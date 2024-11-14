@@ -48,6 +48,7 @@ import logging
 import sys
 import json
 import time
+import signal
 
 # Configure logging
 logging.basicConfig(
@@ -263,3 +264,24 @@ def get_ap_status():
             return json.load(f)
     except:
         return {'status': 'unknown'}
+
+def write_wpa_config(config_text):
+    """Safely write wpa_supplicant configuration"""
+    temp_file = '/tmp/wpa_supplicant.conf.tmp'
+    try:
+        with open(temp_file, 'w') as f:
+            f.write(config_text)
+        subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'])
+        subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'])
+    except Exception as e:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise e
+
+def signal_handler(signum, frame):
+    """Handle cleanup on web server termination"""
+    print("\nWeb server shutting down...")
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)

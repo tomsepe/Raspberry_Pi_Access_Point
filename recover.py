@@ -27,12 +27,19 @@ def recover_system():
         # Restart networking
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'])
+
+        print("Ensuring Raspberry Pi Desktop is installed...")
+        # Make sure RPD is installed and set as default
+        subprocess.run(['sudo', 'apt-get', 'update'])
+        subprocess.run(['sudo', 'apt-get', 'install', '--reinstall', 'raspberrypi-ui-mods', '-y'])
         
-        # Restart RPD desktop environment
-        print("Restarting desktop environment...")
-        subprocess.run(['sudo', 'systemctl', 'restart', 'raspberrypi-ui-mods'])
+        print("Setting Raspberry Pi Desktop as default...")
+        # Set RPD as default display manager
+        subprocess.run(['sudo', 'update-alternatives', '--set', 'x-session-manager', '/usr/bin/startlxde-pi'])
         
-        print("System recovered to normal networking state")
+        print("\nSystem recovered to normal networking state")
+        print("\nIMPORTANT: Please reboot your system to complete the recovery:")
+        print("sudo reboot")
         
     except Exception as e:
         print(f"Recovery error: {str(e)}")
