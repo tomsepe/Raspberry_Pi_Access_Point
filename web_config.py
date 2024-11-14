@@ -125,29 +125,47 @@ def index():
         '''
 
 # Define route for network scanning endpoint
-@app.route('/scan_networks', methods=['GET'])
+@app.route('/scan_networks')
 def scan_networks():
-    if not os.path.exists('/sys/class/net/wlan0'):
-        return jsonify({'error': 'Wireless interface not found'}), 500
     try:
-        # Run the Linux command 'iwlist wlan0 scan' to scan for WiFi networks
-        # subprocess.check_output executes the command and captures the output
-        scan_output = subprocess.check_output(['sudo', 'iwlist', 'wlan0', 'scan']).decode('utf-8')
-        networks = []
+        # First, ensure interface is up and ready
+        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
+        time.sleep(1)  # Give interface time to come up
         
-        # Parse the command output line by line
-        for line in scan_output.split('\n'):
-            if 'ESSID:' in line:  # Look for lines containing network names
-                # Extract the network name and clean it up
-                ssid = line.split('ESSID:')[1].strip().strip('"')
-                if ssid:  # Only add non-empty network names
-                    networks.append(ssid)
-        
-        # Return the list of networks as JSON
-        return jsonify({'networks': networks})
+        # Try scanning up to 3 times
+        for attempt in range(3):
+            try:
+                print(f"Scanning attempt {attempt + 1}...")
+                # Use iwlist for scanning
+                result = subprocess.run(['sudo', 'iwlist', 'wlan0', 'scan'], 
+                                     capture_output=True, 
+                                     text=True,
+                                     check=True)
+                
+                networks = []
+                for line in result.stdout.split('\n'):
+                    if 'ESSID:' in line:
+                        # Extract SSID and remove quotes
+                        ssid = line.split('ESSID:')[1].strip().strip('"')
+                        if ssid and ssid != '\\x00' and ssid not in networks:
+                            networks.append(ssid)
+                
+                return jsonify({'success': True, 'networks': networks})
+                
+            except subprocess.CalledProcessError as e:
+                print(f"Scan attempt {attempt + 1} failed: {str(e)}")
+                if attempt < 2:  # If not the last attempt
+                    print("Waiting before retry...")
+                    time.sleep(2)  # Wait before retrying
+                    continue
+                else:
+                    raise  # Re-raise on final attempt
+                    
     except Exception as e:
-        # If anything goes wrong, return the error as JSON with a 500 status code
-        return jsonify({'error': str(e)}), 500
+        error_msg = f"Error scanning networks: {str(e)}"
+        print(error_msg)
+        app.logger.error(error_msg)
+        return jsonify({'success': False, 'error': error_msg}), 500
 
 # Define route for WiFi credentials submission
 @app.route('/connect', methods=['POST'])
@@ -297,3 +315,30 @@ def signal_handler(signum, frame):
 
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
+
+def setup_hostname():
+    """Configure the Raspberry Pi hostname"""
+    try:
+        # Install avahi-daemon if not present
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
+        
+        # Set hostname
+        with open('/etc/hostname', 'w') as f:
+            f.write('shelf\n')
+        
+        # Update hosts file
+        with open('/etc/hosts', 'r') as f:
+            hosts = f.readlines()
+        
+        with open('/etc/hosts', 'w') as f:
+            for line in hosts:
+                if '127.0.1.1' in line:
+                    f.write('127.0.1.1\tshelf\n')
+                else:
+                    f.write(line)
+        
+        # Restart hostname service
+        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'])
+        
+    except Exception as e:
+        print(f"Error setting up hostname: {str(e)}")
