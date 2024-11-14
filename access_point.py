@@ -167,18 +167,25 @@ def cleanup_ap():
         if os.path.exists('/etc/dnsmasq.conf.backup'):
             subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'], check=False)
             
-        # Restore wpa_supplicant
+        # Reset network interface
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=False)
+        time.sleep(1)
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=False)
+        
+        # Restore network services in correct order
+        print("Restoring network services...")
         subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=False)
         subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=False)
         subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
-        
-        # Reset network interface
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=False)
         time.sleep(1)
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=False)
         
-        # Restart networking services
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        time.sleep(1)
+        
+        # Start NetworkManager if it exists
+        subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
+        time.sleep(1)
+        
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
         
         # Clean up GPIO safely
@@ -188,6 +195,7 @@ def cleanup_ap():
             pass
             
         print("Cleanup completed. Original network configuration restored.")
+        print("Network services should be restored within a few seconds.")
         
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
