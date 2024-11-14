@@ -119,15 +119,13 @@ def is_web_server_running():
     return False
 
 def get_keyboard_input():
-    """Get a single keyboard character without waiting for enter"""
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    """Get a single keyboard character"""
     try:
-        tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return ch
+        # Don't use tty.setraw mode, just read normally
+        return sys.stdin.read(1).lower()
+    except Exception as e:
+        print(f"Error reading keyboard: {str(e)}")
+        return None
 
 # Register signal handlers
 signal.signal(signal.SIGINT, signal_handler)
@@ -215,24 +213,24 @@ def main():
         print("Press 'q' to quit")
         
         while True:
-            # Check for keyboard input
-            if select.select([sys.stdin], [], [], 0.0)[0]:
-                key = get_keyboard_input()
-                if key == 'w' and not ap_running:
+            # Simpler keyboard input check
+            if sys.stdin in select.select([sys.stdin], [], [], 0.1)[0]:
+                char = get_keyboard_input()
+                if char == 'w' and not ap_running:
                     if setup_access_point():
                         ap_running = True
-                elif key == 'q':
+                elif char == 'q':
                     print("\nShutting down...")
                     cleanup_ap()
                     break
             
             # Check GPIO button
-            if not GPIO.input(BUTTON_PIN) and not ap_running:  # Button is pressed (active low)
+            if not GPIO.input(BUTTON_PIN) and not ap_running:
                 print("\nButton pressed - starting access point...")
                 if setup_access_point():
                     ap_running = True
             
-            time.sleep(0.1)  # Small delay to prevent CPU hogging
+            time.sleep(0.1)
             
     except KeyboardInterrupt:
         print("\nShutting down...")
