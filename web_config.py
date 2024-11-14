@@ -64,24 +64,45 @@ def setup_admin_server():
     """Setup and start the admin server"""
     try:
         print("Setting up admin server...")
-        # Ensure avahi-daemon is installed
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
         
         # Get the current script's directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
         admin_dir = os.path.join(current_dir, 'admin')
-        
-        print(f"Starting admin server from {admin_dir}")
-        
-        # Start admin server with full path
         admin_server_path = os.path.join(admin_dir, 'admin_server.py')
         
-        # Start the admin server in a new process
-        print("Starting admin server...")
-        subprocess.Popen(['sudo', 'python3', admin_server_path], 
-                        start_new_session=True)
+        # Create systemd service file
+        service_content = f'''[Unit]
+Description=Shelf Admin Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 {admin_server_path}
+WorkingDirectory={admin_dir}
+User=root
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+'''
         
-        print("Admin server started, exiting config server...")
+        # Write service file
+        service_path = '/etc/systemd/system/shelf-admin.service'
+        with open('/tmp/shelf-admin.service', 'w') as f:
+            f.write(service_content)
+        
+        # Move and set permissions
+        subprocess.run(['sudo', 'mv', '/tmp/shelf-admin.service', service_path], check=True)
+        subprocess.run(['sudo', 'chmod', '644', service_path], check=True)
+        
+        print("Enabling and starting admin server service...")
+        # Reload systemd, enable and start service
+        subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'enable', 'shelf-admin'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'shelf-admin'], check=True)
+        
+        print("Admin server service installed and started")
+        print("Exiting config server...")
         
         # Exit immediately
         os._exit(0)
