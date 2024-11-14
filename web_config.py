@@ -190,8 +190,22 @@ network={{
     key_mgmt=WPA-PSK
 }}'''
         
-        # Write the configuration
-        write_wpa_config(config_text)
+        # Write the configuration directly
+        try:
+            # Write to temporary file first
+            temp_file = '/tmp/wpa_supplicant.conf.tmp'
+            with open(temp_file, 'w') as f:
+                f.write(config_text)
+            
+            # Move temp file to final location and set permissions
+            subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
+            subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
+            
+        except Exception as e:
+            app.logger.error(f"Error writing wpa_supplicant configuration: {str(e)}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise e
         
         # Restart the wireless interface
         subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=True)
@@ -203,36 +217,8 @@ network={{
         result = subprocess.run(['iwgetid'], capture_output=True, text=True)
         
         if ssid in result.stdout:
-            print("WiFi connection successful, starting admin server...")
-            
-            # Start admin server in a new process
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            admin_dir = os.path.join(current_dir, 'admin')
-            admin_server_path = os.path.join(admin_dir, 'admin_server.py')
-            
-            # Use systemd to start the admin server
-            service_config = f'''[Unit]
-Description=Admin Server
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/python3 {admin_server_path}
-WorkingDirectory={admin_dir}
-User=root
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-'''
-            
-            # Write systemd service file
-            with open('/etc/systemd/system/admin-server.service', 'w') as f:
-                f.write(service_config)
-            
-            # Enable and start the service
-            subprocess.run(['sudo', 'systemctl', 'daemon-reload'])
-            subprocess.run(['sudo', 'systemctl', 'enable', 'admin-server'])
-            subprocess.run(['sudo', 'systemctl', 'start', 'admin-server'])
+            # Set up admin server
+            setup_admin_server()
             
             return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
         else:
@@ -291,19 +277,6 @@ def get_ap_status():
             return json.load(f)
     except:
         return {'status': 'unknown'}
-
-def write_wpa_config(config_text):
-    """Safely write wpa_supplicant configuration"""
-    temp_file = '/tmp/wpa_supplicant.conf.tmp'
-    try:
-        with open(temp_file, 'w') as f:
-            f.write(config_text)
-        subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'])
-        subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'])
-    except Exception as e:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        raise e
 
 def signal_handler(signum, frame):
     """Handle cleanup on web server termination"""
