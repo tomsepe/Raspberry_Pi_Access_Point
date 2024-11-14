@@ -68,15 +68,15 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     <p>The system creates a systemd service for the admin interface:</p>
     <pre>
     # Service file location
-    /etc/systemd/system/shelf-admin.service
+    /etc/systemd/system/pi-admin-panel.service
 
     # Service management commands
-    sudo systemctl status shelf-admin    # Check service status
-    sudo systemctl start shelf-admin     # Start service
-    sudo systemctl stop shelf-admin      # Stop service
-    sudo systemctl restart shelf-admin   # Restart service
-    sudo systemctl enable shelf-admin    # Enable on boot
-    sudo journalctl -u shelf-admin       # View service logs
+    sudo systemctl status pi-admin-panel    # Check service status
+    sudo systemctl start pi-admin-panel     # Start service
+    sudo systemctl stop pi-admin-panel      # Stop service
+    sudo systemctl restart pi-admin-panel   # Restart service
+    sudo systemctl enable pi-admin-panel    # Enable on boot
+    sudo journalctl -u pi-admin-panel       # View service logs
     </pre>
 
     <h2>Debugging and Testing</h2>
@@ -199,8 +199,8 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
         <li>Admin Interface:
             <ul>
                 <li>System connects to configured WiFi</li>
-                <li>web_config.py creates and starts shelf-admin service</li>
-                <li>Admin interface accessible at http://testpi.local</li>
+                <li>web_config.py creates and starts pi-admin-panel service</li>
+                <li>Admin interface accessible at http://[hostname].local</li>
                 <li>Interface shows system status and metrics</li>
             </ul>
         </li>
@@ -279,13 +279,13 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     <h3>Admin Server Debugging</h3>
     <pre>
     # Check admin server status
-    sudo systemctl status shelf-admin
+    sudo systemctl status pi-admin-panel
 
     # View admin server logs
-    sudo journalctl -u shelf-admin -f
+    sudo journalctl -u pi-admin-panel -f
 
     # Test admin interface
-    curl -v http://testpi.local
+    curl -v http://[hostname].local
 
     # Check avahi-daemon status
     sudo systemctl status avahi-daemon

@@ -18,7 +18,7 @@ GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 # Should define constants at top of file
 WIFI_INTERFACE = 'wlan0'
-AP_SSID = 'shelfWIFI'
+AP_SSID = 'PiConfigWiFi'
 AP_PASSWORD = '12345678'
 AP_IP = '192.168.4.1'
 
@@ -268,7 +268,7 @@ def main():
                     print("\nSetting up access point...")
                     if setup_access_point():
                         print("Access point and web server are ready")
-                        print("Connect to 'shelfWIFI' network and visit http://192.168.4.1")
+                        print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
                 elif key == 'q':
                     print("\nExiting program...")
                     cleanup_ap()  # Ensure cleanup runs before exit
@@ -286,7 +286,7 @@ def main():
                         print("Button held for 10 seconds, setting up access point...")
                         if setup_access_point():
                             print("Access point and web server are ready")
-                            print("Connect to 'shelfWIFI' network and visit http://192.168.4.1")
+                            print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
                         break
                     time.sleep(0.1)
             '''

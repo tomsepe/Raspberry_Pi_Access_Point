@@ -20,7 +20,7 @@ Requirements:
 Usage:
 1. Start the access point using accessPoint.py
 2. Run this script: sudo python3 web_config.py
-3. Connect to 'shelfWIFI' network
+3. Connect to 'PiConfigWiFi' network
 4. Navigate to http://192.168.4.1 in a web browser
 
 Error Handling:
@@ -72,7 +72,7 @@ def setup_admin_server():
         
         # Create systemd service file
         service_content = f'''[Unit]
-Description=Shelf Admin Server
+Description=Pi Admin Panel
 After=network.target
 
 [Service]
@@ -87,19 +87,19 @@ WantedBy=multi-user.target
 '''
         
         # Write service file
-        service_path = '/etc/systemd/system/shelf-admin.service'
-        with open('/tmp/shelf-admin.service', 'w') as f:
+        service_path = '/etc/systemd/system/pi-admin-panel.service'
+        with open('/tmp/pi-admin-panel.service', 'w') as f:
             f.write(service_content)
         
         # Move and set permissions
-        subprocess.run(['sudo', 'mv', '/tmp/shelf-admin.service', service_path], check=True)
+        subprocess.run(['sudo', 'mv', '/tmp/pi-admin-panel.service', service_path], check=True)
         subprocess.run(['sudo', 'chmod', '644', service_path], check=True)
         
         print("Enabling and starting admin server service...")
         # Reload systemd, enable and start service
         subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'enable', 'shelf-admin'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'start', 'shelf-admin'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'enable', 'pi-admin-panel'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'pi-admin-panel'], check=True)
         
         print("Admin server service installed and started")
         print("Exiting config server...")
@@ -329,7 +329,7 @@ def check_ap_running():
     try:
         with open('/etc/hostapd/hostapd.conf', 'r') as f:
             content = f.read()
-            return 'ssid=shelfWIFI' in content
+            return 'ssid=PiConfigWiFi' in content
     except:
         return False
 
