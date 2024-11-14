@@ -229,7 +229,7 @@ def connect_wifi():
         if not ssid or not password:
             return jsonify({'success': False, 'error': 'Missing SSID or password'}), 400
             
-        print(f"Attempting to connect to network: {ssid}")
+        print(f"\n1. Starting connection process to: {ssid}")
             
         # Configure WiFi
         config_text = f'''
@@ -245,83 +245,94 @@ network={{
         
         # Write the configuration
         try:
-            print("Writing wpa_supplicant configuration...")
+            print("\n2. Writing wpa_supplicant configuration...")
             temp_file = '/tmp/wpa_supplicant.conf.tmp'
             with open(temp_file, 'w') as f:
                 f.write(config_text)
             
             subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
+            print("   Configuration file written successfully")
             
         except Exception as e:
-            print(f"Error writing configuration: {str(e)}")
+            print(f"   Error writing configuration: {str(e)}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise e
         
-        # Stop the AP and reconfigure wireless
         try:
-            print("Stopping network services...")
+            print("\n3. Stopping access point services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
+            print("   AP services stopped")
             
-            print("Configuring wireless interface...")
+            print("\n4. Reconfiguring wireless interface...")
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
             time.sleep(2)
+            print("   Interface down, wpa_supplicant killed")
             
-            print("Starting wireless connection...")
-            # Unmask and enable wpa_supplicant service
+            print("\n5. Starting wireless services...")
             subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
             subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
-            
-            # Start wpa_supplicant service
             subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
             time.sleep(2)
+            print("   wpa_supplicant service started")
             
-            print("Bringing up interface...")
+            print("\n6. Bringing up interface...")
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
+            print("   Interface is up")
             
-            # Restart dhcpcd service
-            print("Restarting DHCP client...")
+            print("\n7. Restarting DHCP client...")
             subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
+            time.sleep(2)
+            print("   DHCP client restarted")
+            
+            # Add wpa_cli reconfigure
+            print("\n8. Reconfiguring wpa_supplicant...")
+            subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=True)
+            print("   wpa_supplicant reconfigured")
             
         except Exception as e:
-            print(f"Error configuring wireless: {str(e)}")
+            print(f"   Error in network reconfiguration: {str(e)}")
             raise e
         
-        # Wait for connection with timeout
-        print("Waiting for connection...")
+        print("\n9. Waiting for connection...")
         max_attempts = 12
-        connected = False  # Add flag to track connection status
+        connected = False
         
         for attempt in range(max_attempts):
             try:
+                # Check both connection and IP assignment
                 result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-                print(f"Connection check {attempt + 1}: {result.stdout.strip()}")
+                ip_check = subprocess.run(['ip', 'addr', 'show', 'wlan0'], capture_output=True, text=True)
                 
-                if ssid in result.stdout:
-                    print(f"Successfully connected to {ssid}")
-                    # Set up admin server
+                print(f"\n   Connection check {attempt + 1}:")
+                print(f"   Network status: {result.stdout.strip() if result.stdout.strip() else 'No network'}")
+                print(f"   IP status: {'Has IP' if 'inet ' in ip_check.stdout else 'No IP'}")
+                
+                if ssid in result.stdout and 'inet ' in ip_check.stdout:
+                    print(f"\n10. Successfully connected to {ssid}")
+                    print("\n11. Setting up admin server...")
                     setup_admin_server()
-                    connected = True  # Set flag on successful connection
+                    connected = True
                     return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
                 
             except Exception as e:
-                print(f"Error checking connection: {str(e)}")
+                print(f"   Error checking connection: {str(e)}")
             
             time.sleep(5)
-            print(f"Connection attempt {attempt + 1}/{max_attempts}...")
+            print(f"   Connection attempt {attempt + 1}/{max_attempts}...")
         
         # If we get here without returning, connection failed
-        print("Failed to connect to network")
+        print("\nFailed to connect to network after all attempts")
         return jsonify({
             'success': False, 
             'error': 'Failed to connect to network after timeout'
         }), 500
             
     except Exception as e:
-        print(f"Error in connect_wifi: {str(e)}")
+        print(f"\nError in connect_wifi: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def check_ap_running():
