@@ -41,5 +41,7 @@ def get_status():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    # Make sure we're not using the same port as the config server
+    print("Starting admin server...")
+    print(f"Current directory: {os.getcwd()}")
+    print(f"Template folder: {app.template_folder}")
     app.run(host='0.0.0.0', port=80)

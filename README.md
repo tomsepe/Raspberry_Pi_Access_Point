@@ -12,6 +12,9 @@ This system provides a simple way to configure WiFi settings on a Raspberry Pi t
 
 ### 1. Initial Setup
 '''
+'''
+sudo nano /etc/systemd/system/admin-server.service
+'''
 sudo apt-get update
 sudo apt-get install -y hostapd dnsmasq dhcpcd5
 sudo systemctl unmask hostapd

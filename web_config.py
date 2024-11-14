@@ -171,42 +171,16 @@ def scan_networks():
 @app.route('/connect', methods=['POST'])
 def connect_wifi():
     try:
-        print("Starting WiFi connection process...")
         data = request.get_json()
-        
-        # Validate input data
-        if not data:
-            return jsonify({'success': False, 'error': 'No data received'}), 400
-            
         ssid = data.get('ssid')
         password = data.get('password')
         
-        print(f"Attempting to connect to network: {ssid}")
-        
-        try:
-            # Turn off WiFi
-            print("Turning off WiFi...")
-            subprocess.run(['sudo', 'rfkill', 'block', 'wifi'], check=True)
-            time.sleep(2)
+        if not ssid or not password:
+            return jsonify({'success': False, 'error': 'Missing SSID or password'}), 400
             
-            # Turn WiFi back on
-            print("Turning WiFi back on...")
-            subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
-            time.sleep(2)
-            
-            # Stop AP services
-            print("Stopping AP services...")
-            subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-            
-            # Unmask and enable wpa_supplicant
-            print("Configuring wpa_supplicant...")
-            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
-            
-            # Create wpa_supplicant configuration
-            print("Writing wpa_supplicant configuration...")
-            wpa_supplicant_conf = f'''ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+        # Configure WiFi
+        config_text = f'''
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 country=US
 
@@ -215,34 +189,54 @@ network={{
     psk="{password}"
     key_mgmt=WPA-PSK
 }}'''
+        
+        # Write the configuration
+        write_wpa_config(config_text)
+        
+        # Restart the wireless interface
+        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=True)
+        
+        # Wait for connection
+        time.sleep(5)
+        
+        # Verify connection
+        result = subprocess.run(['iwgetid'], capture_output=True, text=True)
+        
+        if ssid in result.stdout:
+            print("WiFi connection successful, starting admin server...")
+            
+            # Start admin server in a new process
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            admin_dir = os.path.join(current_dir, 'admin')
+            admin_server_path = os.path.join(admin_dir, 'admin_server.py')
+            
+            # Use systemd to start the admin server
+            service_config = f'''[Unit]
+Description=Admin Server
+After=network.target
 
-            # Write the new configuration
-            with open('/etc/wpa_supplicant/wpa_supplicant.conf', 'w') as f:
-                f.write(wpa_supplicant_conf)
+[Service]
+ExecStart=/usr/bin/python3 {admin_server_path}
+WorkingDirectory={admin_dir}
+User=root
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+'''
             
-            # Restart networking services
-            print("Restarting network services...")
-            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
-            time.sleep(2)
-            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
+            # Write systemd service file
+            with open('/etc/systemd/system/admin-server.service', 'w') as f:
+                f.write(service_config)
             
-            print("Waiting for connection...")
-            time.sleep(10)  # Give more time for connection
+            # Enable and start the service
+            subprocess.run(['sudo', 'systemctl', 'daemon-reload'])
+            subprocess.run(['sudo', 'systemctl', 'enable', 'admin-server'])
+            subprocess.run(['sudo', 'systemctl', 'start', 'admin-server'])
             
-            # Check if connection was successful
-            result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-            if ssid in result.stdout:
-                # Set up admin server
-                setup_admin_server()
-                
-                return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
-            else:
-                return jsonify({'success': False, 'error': 'Failed to connect to network'}), 500
-            
-        except subprocess.CalledProcessError as e:
-            app.logger.error(f"Command failed: {str(e)}")
+            return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to connect to network'}), 500
             
     except Exception as e:
         app.logger.error(f"Error in connect_wifi: {str(e)}")
@@ -331,19 +325,27 @@ def setup_admin_server():
     """Setup and start the admin server"""
     try:
         print("Setting up admin server...")
-        # Ensure avahi-daemon is installed
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
         
         # Stop any existing web servers
+        print("Stopping existing web servers...")
         stop_web_server()
         
         # Get the current script's directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
         admin_dir = os.path.join(current_dir, 'admin')
         
-        # Start admin server in a new process
-        subprocess.Popen(['sudo', 'python3', 'admin_server.py'], 
-                        cwd=admin_dir)
+        print(f"Starting admin server from {admin_dir}")
+        
+        # Start admin server with full path
+        admin_server_path = os.path.join(admin_dir, 'admin_server.py')
+        
+        # Use nohup to keep the process running after parent exits
+        subprocess.Popen(['sudo', 'nohup', 'python3', admin_server_path, '&'], 
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE)
+        
+        print("Admin server started, waiting to verify...")
+        time.sleep(5)  # Give the server time to start
         
         # Stop the current (config) server
         print("Stopping config server...")
