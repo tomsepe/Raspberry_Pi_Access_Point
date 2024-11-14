@@ -198,6 +198,7 @@ slaac private''')
         
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
+        raise  # Re-raise the exception after printing the error
 
 # Add this to handle program exit
 def signal_handler(signum, frame):
