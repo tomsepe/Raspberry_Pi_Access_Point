@@ -43,11 +43,11 @@ Version: 1.0
 # Import necessary modules
 from flask import Flask, render_template, request, jsonify  # Flask web framework components
 import subprocess  # For running system commands (wifi scanning)
-import wifi  # For wifi operations
 import os  # For checking file permissions
 import logging
 import sys
 import json
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -167,8 +167,17 @@ def connect_wifi():
         if not password or len(password) < 8:
             return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
             
-        # Create wpa_supplicant configuration
-        wpa_supplicant_conf = f'''ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+        try:
+            # Stop AP services
+            subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
+            
+            # Unmask and enable wpa_supplicant
+            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
+            
+            # Create wpa_supplicant configuration
+            wpa_supplicant_conf = f'''ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 country=US
 
@@ -178,31 +187,32 @@ network={{
     key_mgmt=WPA-PSK
 }}'''
 
-        # Check if wpa_supplicant.conf is writable
-        if not os.access('/etc/wpa_supplicant/wpa_supplicant.conf', os.W_OK):
-            return jsonify({'success': False, 'error': 'Permission denied: Cannot write to configuration file'}), 403
-
-        # Write configuration with error handling
-        try:
+            # Write the new configuration
             with open('/etc/wpa_supplicant/wpa_supplicant.conf', 'w') as f:
                 f.write(wpa_supplicant_conf)
-        except IOError as e:
-            return jsonify({'success': False, 'error': f'Failed to write configuration: {str(e)}'}), 500
-
-        # Reconfigure wireless interface with error handling
-        try:
-            result = subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], 
-                                 capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                return jsonify({'success': False, 'error': f'Failed to reconfigure wireless: {result.stderr}'}), 500
-        except subprocess.TimeoutExpired:
-            return jsonify({'success': False, 'error': 'Timeout while reconfiguring wireless'}), 500
-        
-        return jsonify({'success': True})
-        
+            
+            # Restart networking services
+            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
+            time.sleep(1)
+            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
+            
+            time.sleep(5)  # Give some time for connection to establish
+            
+            # Check if connection was successful
+            result = subprocess.run(['iwgetid'], capture_output=True, text=True)
+            if ssid in result.stdout:
+                return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to connect to network'}), 500
+            
+        except subprocess.CalledProcessError as e:
+            app.logger.error(f"Command failed: {str(e)}")
+            
     except Exception as e:
-        app.logger.error(f'Unexpected error in connect_wifi: {str(e)}')
-        return jsonify({'success': False, 'error': 'An unexpected error occurred'}), 500
+        app.logger.error(f"Error in connect_wifi: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def check_ap_running():
     """Verify that the access point is running"""
@@ -213,25 +223,10 @@ def check_ap_running():
     except:
         return False
 
-if __name__ == '__main__':
-    try:
-        if not check_requirements():
-            print("Missing required packages. Please install them first.")
-            sys.exit(1)
-            
-        if not check_ap_running():
-            print("Error: Access point is not configured. Please run accessPoint.py first.")
-            sys.exit(1)
-        
-        print("Starting web configuration server...")
-        app.run(host='192.168.4.1', port=80, debug=True)
-    except Exception as e:
-        print(f"Failed to start web server: {str(e)}")
-        sys.exit(1)
-
-# Need to add requirements check
+# Add this function before the if __name__ == '__main__': block
 def check_requirements():
-    required_packages = ['flask', 'wifi']
+    """Check if required packages are installed"""
+    required_packages = ['flask']
     for package in required_packages:
         try:
             __import__(package)
@@ -239,6 +234,19 @@ def check_requirements():
             print(f"Missing required package: {package}")
             return False
     return True
+
+# Then your main execution block
+if __name__ == '__main__':
+    if not check_requirements():
+        print("Missing required packages. Please install them first.")
+        sys.exit(1)
+        
+    if not check_ap_running():
+        print("Error: Access point is not configured. Please run accessPoint.py first.")
+        sys.exit(1)
+    
+    print("Starting web configuration server...")
+    app.run(host='0.0.0.0', port=80, debug=True)
 
 def verify_connection(ssid):
     """Verify successful connection to network"""

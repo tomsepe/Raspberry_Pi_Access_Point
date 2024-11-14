@@ -8,6 +8,8 @@ import json
 import psutil
 import termios
 import tty  # For keyboard input
+import argparse  # Add this at the top with other imports
+import atexit
 
 # GPIO setup
 BUTTON_PIN = 2  # GPIO Pin 2
@@ -23,6 +25,13 @@ AP_IP = '192.168.4.1'
 # Add global variable for web server process
 web_server_process = None
 
+# Add this before the main() function
+def parse_args():
+    parser = argparse.ArgumentParser(description='Raspberry Pi Access Point Setup')
+    parser.add_argument('--skip-requirements', action='store_true',
+                      help='Skip checking and installing required packages')
+    return parser.parse_args()
+
 def setup_access_point():
     """Configure the Raspberry Pi as a WiFi access point"""
     try:
@@ -30,11 +39,17 @@ def setup_access_point():
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
 
-        # Install required packages first while we still have internet
-        print("Checking and installing required packages...")
-        subprocess.run(['sudo', 'apt-get', 'update'])
-        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq', 'dhcpcd5'])
+        args = parse_args()  # Get command line arguments
         
+        # Only check requirements if not skipped
+        if not args.skip_requirements:
+            # Install required packages first while we still have internet
+            print("Checking and installing required packages...")
+            subprocess.run(['sudo', 'apt-get', 'update'])
+            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq', 'dhcpcd5'])
+        else:
+            print("Skipping requirements check...")
+
         # Now disconnect from existing WiFi
         print("Disconnecting from any existing WiFi networks...")
         subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
@@ -133,52 +148,62 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         print(f"Password: {AP_PASSWORD}")
         print(f"IP Address: {AP_IP}")
         
-        if setup_successful:
-            # Launch web configuration server
-            print("Starting web configuration server...")
-            try:
-                # Use subprocess to run web_config.py
-                web_process = subprocess.Popen(['sudo', 'python3', 'web_config.py'])
-                
-                # Store the process ID for later cleanup
-                global web_server_process
-                web_server_process = web_process
-                
-                print("Web configuration server started successfully")
-                print("You can now connect to http://192.168.4.1")
-                return True
-            except Exception as e:
-                print(f"Failed to start web configuration server: {str(e)}")
-                return False
+        # Launch web configuration server
+        print("Starting web configuration server...")
+        try:
+            # Use subprocess to run web_config.py
+            web_process = subprocess.Popen(['sudo', 'python3', 'web_config.py'])
+            
+            # Store the process ID for later cleanup
+            global web_server_process
+            web_server_process = web_process
+            
+            print("Web configuration server started successfully")
+            print("You can now connect to http://192.168.4.1")
+            return True
+        except Exception as e:
+            print(f"Failed to start web configuration server: {str(e)}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 def cleanup_ap():
     """Restore original network configuration"""
     print("Cleaning up access point configuration...")
-    
     try:
-        # Stop services
+        # Stop AP services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
+        
+        # Restore original configuration files
+        if os.path.exists('/etc/dhcpcd.conf.backup'):
+            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'])
+        
+        if os.path.exists('/etc/dnsmasq.conf.backup'):
+            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'])
+            
+        # Restore wpa_supplicant
+        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
+        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
+        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
+        
+        # Reset network interface
+        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'])
+        time.sleep(1)
+        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'])
+        
+        # Restart networking
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
+        subprocess.run(['sudo', 'systemctl', 'restart', 'networking'])
+        
+        # Clean up GPIO
+        GPIO.cleanup()
+        
+        print("Cleanup completed. Original network configuration restored.")
+        
     except Exception as e:
-        print(f"Error stopping services: {str(e)}")
-    finally:
-        try:
-            # Restore network interface
-            subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'])
-            time.sleep(1)
-            
-            # Enable and restart networking services
-            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
-            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
-            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
-            
-            # Bring interface back up
-            subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
-            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
-            
-            print("Network services restored.")
-        except Exception as e:
-            print(f"Error restoring network services: {str(e)}")
+        print(f"Cleanup error: {str(e)}")
 
 # Add this to handle program exit
 def signal_handler(signum, frame):
@@ -213,6 +238,9 @@ def get_keyboard_input():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
+
+# Register cleanup function to run at exit
+atexit.register(cleanup_ap)
 
 def main():
     try:
@@ -257,6 +285,7 @@ def main():
     finally:
         cleanup_ap()
         GPIO.cleanup()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
