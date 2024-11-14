@@ -221,79 +221,65 @@ network={{
             raise e
         
         try:
-            print("\n3. Stopping network services...")
+            print("\n3. Stopping AP services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-            print("   Services stopped")
-            
+            time.sleep(2)
+
             print("\n4. Reconfiguring network interface...")
+            subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=True)  # Clear old IP
             subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
             time.sleep(2)
-            
+
             print("\n5. Starting wireless services...")
             subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
             time.sleep(1)
-            
-            # Start wpa_supplicant with detailed output
-            print("   Starting wpa_supplicant...")
-            wpa_process = subprocess.run([
-                'sudo',
-                'wpa_supplicant',
-                '-B',                # Run in background
-                '-i', 'wlan0',       # Interface
-                '-c', '/etc/wpa_supplicant/wpa_supplicant.conf',  # Config file
-                '-d'                 # Debug output
-            ], capture_output=True, text=True)
-            print(f"   wpa_supplicant output: {wpa_process.stdout}")
-            
-            print("\n6. Starting DHCP client...")
-            subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'], check=True)
-            time.sleep(3)
-            
+
+            # Start DHCP client to get new IP
+            print("\n6. Requesting IP address...")
+            subprocess.run(['sudo', 'dhclient', '-v', 'wlan0'], check=True)
+            time.sleep(5)  # Give time for IP assignment
+
             print("\n7. Checking connection status...")
-            max_attempts = 30  # Increase from 15 to 30 attempts
+            max_attempts = 30
             connected = False
             
             for attempt in range(max_attempts):
                 try:
-                    # Check both connection and IP assignment
-                    iwconfig = subprocess.run(['iwconfig', 'wlan0'], capture_output=True, text=True)
-                    ifconfig = subprocess.run(['ifconfig', 'wlan0'], capture_output=True, text=True)
-                    
                     print(f"\n   Connection check {attempt + 1}/{max_attempts}:")
-                    print(f"   iwconfig output: {iwconfig.stdout.strip()}")
-                    print(f"   ifconfig output: {ifconfig.stdout.strip()}")
                     
-                    if ssid in iwconfig.stdout:
-                        if 'inet ' in ifconfig.stdout:
-                            print(f"\n8. Successfully connected to {ssid}")
-                            
-                            # Test internet connectivity with longer timeout
-                            print("\n9. Testing internet connection...")
-                            for ping_attempt in range(3):  # Try ping up to 3 times
-                                print(f"   Ping attempt {ping_attempt + 1}/3...")
-                                ping_test = subprocess.run(
-                                    ['ping', '-c', '1', '-W', '5', '8.8.8.8'],  # 5 second timeout
-                                    capture_output=True
-                                )
-                                if ping_test.returncode == 0:
-                                    print("   Internet connection successful")
-                                    connected = True
-                                    break
-                                time.sleep(2)
-                            
-                            if connected:
+                    # Check IP assignment
+                    ip_check = subprocess.run(['ip', 'addr', 'show', 'wlan0'], 
+                                           capture_output=True, text=True)
+                    print(f"   IP configuration: {ip_check.stdout.strip()}")
+                    
+                    if ssid in subprocess.run(['iwgetid'], 
+                        capture_output=True, text=True).stdout:
+                        
+                        # Test internet connectivity
+                        print("\n8. Testing internet connection...")
+                        for ping_attempt in range(3):
+                            print(f"   Ping attempt {ping_attempt + 1}/3...")
+                            ping_test = subprocess.run(
+                                ['ping', '-c', '1', '-W', '5', '8.8.8.8'],
+                                capture_output=True
+                            )
+                            if ping_test.returncode == 0:
+                                print("   Internet connection successful!")
+                                connected = True
                                 break
-                            else:
-                                print("   Warning: Internet connection failed, retrying...")
-                                
+                            time.sleep(2)
+                        
+                        if connected:
+                            break
+                            
                 except Exception as e:
                     print(f"   Error checking connection: {str(e)}")
                 
                 print(f"   Waiting for connection... ({attempt + 1}/{max_attempts})")
-                time.sleep(3)  # Increased from 2 to 3 seconds
-                
+                time.sleep(3)
+
             if not connected:
                 raise Exception("Failed to establish network connection")
                 
