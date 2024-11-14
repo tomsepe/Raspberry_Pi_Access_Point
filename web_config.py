@@ -178,6 +178,8 @@ def connect_wifi():
         if not ssid or not password:
             return jsonify({'success': False, 'error': 'Missing SSID or password'}), 400
             
+        print(f"Attempting to connect to network: {ssid}")
+            
         # Configure WiFi
         config_text = f'''
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
@@ -192,6 +194,7 @@ network={{
         
         # Write the configuration
         try:
+            print("Writing wpa_supplicant configuration...")
             temp_file = '/tmp/wpa_supplicant.conf.tmp'
             with open(temp_file, 'w') as f:
                 f.write(config_text)
@@ -200,45 +203,65 @@ network={{
             subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             
         except Exception as e:
-            app.logger.error(f"Error writing wpa_supplicant configuration: {str(e)}")
+            print(f"Error writing configuration: {str(e)}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise e
         
         # Stop the AP and reconfigure wireless
         try:
-            # Stop hostapd and dnsmasq
+            print("Stopping network services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
             
-            # Bring down the interface
+            print("Configuring wireless interface...")
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
-            
-            # Stop wpa_supplicant
             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
-            time.sleep(1)
+            time.sleep(2)
             
-            # Start wpa_supplicant
-            subprocess.run(['sudo', 'wpa_supplicant', '-B', '-i', 'wlan0', '-c', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
+            print("Starting wireless connection...")
+            # Unmask and enable wpa_supplicant service
+            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
+            
+            # Start wpa_supplicant service
+            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
+            time.sleep(2)
+            
+            print("Bringing up interface...")
+            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
+            
+            # Restart dhcpcd service
+            print("Restarting DHCP client...")
+            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
             
         except Exception as e:
-            app.logger.error(f"Error stopping wpa_supplicant: {str(e)}")
+            print(f"Error configuring wireless: {str(e)}")
             raise e
         
-        # Wait for connection
-        time.sleep(5)
-        
-        # Verify connection
-        result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-        
-        if ssid in result.stdout:
-            # Set up admin server
-            setup_admin_server()
-            
-            return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
-        else:
-            return jsonify({'success': False, 'error': 'Failed to connect to network'}), 500
-            
+        # Wait for connection with timeout
+        print("Waiting for connection...")
+        max_attempts = 12
+        for attempt in range(max_attempts):
+            try:
+                result = subprocess.run(['iwgetid'], capture_output=True, text=True)
+                print(f"Connection check {attempt + 1}: {result.stdout.strip()}")
+                
+                if ssid in result.stdout:
+                    print(f"Successfully connected to {ssid}")
+                    # Set up admin server
+                    setup_admin_server()
+                    return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
+                
+            except Exception as e:
+                print(f"Error checking connection: {str(e)}")
+                if attempt < max_attempts - 1:
+                    print("Retrying connection...")
+                    time.sleep(10)
+                    continue
+                else:
+                    raise
+                
     except Exception as e:
         app.logger.error(f"Error in connect_wifi: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
