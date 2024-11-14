@@ -154,21 +154,18 @@ def setup_access_point():
                 # Check if web server is running
                 if web_server_process.poll() is None:
                     print("Web configuration server started successfully")
+                    return True
                 else:
                     stdout, stderr = web_server_process.communicate()
                     print("Error starting web server:")
                     print("stdout:", stdout.decode())
                     print("stderr:", stderr.decode())
                     return False
-                    
-                return True
                 
             except Exception as e:
                 print(f"Error starting web server: {str(e)}")
                 return False
             
-            return True
-
         except subprocess.CalledProcessError as e:
             print(f"Error starting hostapd: {str(e)}")
             return False
