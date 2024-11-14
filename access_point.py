@@ -272,7 +272,7 @@ def main():
             print("Failed to setup GPIO")
             sys.exit(1)
             
-        print("Press 'w' to setup access point (or hold GPIO Pin 2 for hardware trigger)")
+        print("Press 'w' to setup access point (or hold GPIO Pin 17 for hardware trigger)")
         print("Press 'q' to quit")
         
         while True:

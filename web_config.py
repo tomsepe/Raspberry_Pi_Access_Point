@@ -189,122 +189,106 @@ def connect_wifi():
             
         # Configure WiFi
         config_text = f'''
+country=US
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
-country=US
 
 network={{
     ssid="{ssid}"
     psk="{password}"
     key_mgmt=WPA-PSK
+    scan_ssid=1
 }}'''
         
-        # Write the configuration
         try:
             print("\n2. Writing wpa_supplicant configuration...")
-            temp_file = '/tmp/wpa_supplicant.conf.tmp'
-            with open(temp_file, 'w') as f:
+            with open('/etc/wpa_supplicant/wpa_supplicant.conf', 'w') as f:
                 f.write(config_text)
-            
-            subprocess.run(['sudo', 'mv', temp_file, '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
             print("   Configuration file written successfully")
             
         except Exception as e:
             print(f"   Error writing configuration: {str(e)}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
             raise e
         
         try:
-            print("\n3. Stopping access point services...")
+            print("\n3. Stopping network services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-            print("   AP services stopped")
+            subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'], check=True)
+            print("   Services stopped")
             
-            print("\n4. Reconfiguring wireless interface...")
-            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
+            print("\n4. Reconfiguring network interface...")
+            subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
             time.sleep(2)
-            print("   Interface down, wpa_supplicant killed")
             
             print("\n5. Starting wireless services...")
-            # First stop any existing wpa_supplicant processes
-            subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=False)
+            subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
             time.sleep(1)
             
-            # Start wpa_supplicant manually with specific interface
-            print("   Starting wpa_supplicant manually...")
-            subprocess.run([
-                'sudo', 
+            # Start wpa_supplicant with detailed output
+            print("   Starting wpa_supplicant...")
+            wpa_process = subprocess.run([
+                'sudo',
                 'wpa_supplicant',
-                '-B',  # Run in background
-                '-i', 'wlan0',  # Specify interface
-                '-c', '/etc/wpa_supplicant/wpa_supplicant.conf'  # Specify config file
-            ], check=True)
-            time.sleep(2)
-            print("   wpa_supplicant started")
+                '-B',                # Run in background
+                '-i', 'wlan0',       # Interface
+                '-c', '/etc/wpa_supplicant/wpa_supplicant.conf',  # Config file
+                '-d'                 # Debug output
+            ], capture_output=True, text=True)
+            print(f"   wpa_supplicant output: {wpa_process.stdout}")
             
-            print("\n6. Bringing up interface...")
-            subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
-            print("   Interface is up")
+            print("\n6. Starting DHCP client...")
+            subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'], check=True)
+            time.sleep(3)
             
-            print("\n7. Restarting DHCP client...")
-            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
-            time.sleep(2)
-            print("   DHCP client restarted")
+            print("\n7. Checking connection status...")
+            max_attempts = 15
+            connected = False
             
-            # Now try wpa_cli reconfigure
-            print("\n8. Checking wpa_supplicant status...")
-            # Check if wpa_supplicant is running
-            wpa_status = subprocess.run(['sudo', 'wpa_cli', 'status'], capture_output=True, text=True)
-            print(f"   wpa_supplicant status: {wpa_status.stdout}")
-            
-            if wpa_status.returncode == 0:
-                print("   Reconfiguring wpa_supplicant...")
-                subprocess.run(['sudo', 'wpa_cli', 'reconfigure'], check=True)
-                print("   wpa_supplicant reconfigured")
+            for attempt in range(max_attempts):
+                try:
+                    # Check both connection and IP assignment
+                    iwconfig = subprocess.run(['iwconfig', 'wlan0'], capture_output=True, text=True)
+                    ifconfig = subprocess.run(['ifconfig', 'wlan0'], capture_output=True, text=True)
+                    
+                    print(f"\n   Connection check {attempt + 1}:")
+                    print(f"   iwconfig output: {iwconfig.stdout.strip()}")
+                    print(f"   ifconfig output: {ifconfig.stdout.strip()}")
+                    
+                    if ssid in iwconfig.stdout and 'inet ' in ifconfig.stdout:
+                        print(f"\n8. Successfully connected to {ssid}")
+                        
+                        # Test internet connectivity
+                        print("\n9. Testing internet connection...")
+                        ping_test = subprocess.run(['ping', '-c', '1', '8.8.8.8'], capture_output=True)
+                        if ping_test.returncode == 0:
+                            print("   Internet connection successful")
+                            connected = True
+                            break
+                        else:
+                            print("   Warning: Internet connection failed")
+                            
+                except Exception as e:
+                    print(f"   Error checking connection: {str(e)}")
+                
+                time.sleep(2)
+                
+            if not connected:
+                raise Exception("Failed to establish network connection")
+                
+            print("\n10. Setting up admin server...")
+            setup_admin_server()
+            return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
             
         except Exception as e:
-            print(f"   Error in network reconfiguration: {str(e)}")
+            print(f"Error in network configuration: {str(e)}")
             raise e
-        
-        print("\n9. Waiting for connection...")
-        max_attempts = 12
-        connected = False
-        
-        for attempt in range(max_attempts):
-            try:
-                # Check both connection and IP assignment
-                result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-                ip_check = subprocess.run(['ip', 'addr', 'show', 'wlan0'], capture_output=True, text=True)
-                
-                print(f"\n   Connection check {attempt + 1}:")
-                print(f"   Network status: {result.stdout.strip() if result.stdout.strip() else 'No network'}")
-                print(f"   IP status: {'Has IP' if 'inet ' in ip_check.stdout else 'No IP'}")
-                
-                if ssid in result.stdout and 'inet ' in ip_check.stdout:
-                    print(f"\n10. Successfully connected to {ssid}")
-                    print("\n11. Setting up admin server...")
-                    setup_admin_server()
-                    connected = True
-                    return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
-                
-            except Exception as e:
-                print(f"   Error checking connection: {str(e)}")
-            
-            time.sleep(5)
-            print(f"   Connection attempt {attempt + 1}/{max_attempts}...")
-        
-        # If we get here without returning, connection failed
-        print("\nFailed to connect to network after all attempts")
-        return jsonify({
-            'success': False, 
-            'error': 'Failed to connect to network after timeout'
-        }), 500
             
     except Exception as e:
         print(f"\nError in connect_wifi: {str(e)}")
+        restore_ap_mode()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def check_ap_running():
@@ -356,6 +340,21 @@ def stop_web_server():
         time.sleep(2)  # Give time for the server to stop
     except Exception as e:
         print(f"Error stopping web server: {str(e)}")
+
+def restore_ap_mode():
+    """Restore access point mode if client connection fails"""
+    try:
+        print("\nRestoring access point mode...")
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'], check=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
+        subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
+        time.sleep(2)
+        subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'], check=True)
+        print("Access point mode restored")
+    except Exception as e:
+        print(f"Error restoring AP mode: {str(e)}")
 
 # Register signal handlers
 signal.signal(signal.SIGTERM, signal_handler)
