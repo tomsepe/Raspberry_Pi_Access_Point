@@ -204,17 +204,41 @@ country_code=US
 # Main Program
 def main():
     try:
-        if not setup_access_point():
-            print("Failed to setup access point")
+        # Setup GPIO first
+        if not setup_gpio():
+            print("Failed to setup GPIO")
             sys.exit(1)
             
-        print("\nPress Ctrl+C to quit")
+        ap_running = False
+        print("\nPress 'w' to start access point")
+        print("Press GPIO button (Pin 17) to start access point")
+        print("Press 'q' to quit")
+        
         while True:
-            time.sleep(1)
+            # Check for keyboard input
+            if select.select([sys.stdin], [], [], 0.0)[0]:
+                key = get_keyboard_input()
+                if key == 'w' and not ap_running:
+                    if setup_access_point():
+                        ap_running = True
+                elif key == 'q':
+                    print("\nShutting down...")
+                    cleanup_ap()
+                    break
+            
+            # Check GPIO button
+            if not GPIO.input(BUTTON_PIN) and not ap_running:  # Button is pressed (active low)
+                print("\nButton pressed - starting access point...")
+                if setup_access_point():
+                    ap_running = True
+            
+            time.sleep(0.1)  # Small delay to prevent CPU hogging
             
     except KeyboardInterrupt:
         print("\nShutting down...")
         cleanup_ap()
+    finally:
+        GPIO.cleanup()
         sys.exit(0)
 
 if __name__ == "__main__":
