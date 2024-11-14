@@ -60,6 +60,36 @@ logging.basicConfig(
 # Create Flask application instance
 app = Flask(__name__)
 
+def setup_admin_server():
+    """Setup and start the admin server"""
+    try:
+        print("Setting up admin server...")
+        # Ensure avahi-daemon is installed
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
+        
+        # Get the current script's directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        admin_dir = os.path.join(current_dir, 'admin')
+        
+        print(f"Starting admin server from {admin_dir}")
+        
+        # Start admin server with full path
+        admin_server_path = os.path.join(admin_dir, 'admin_server.py')
+        
+        # Start the admin server in a new process
+        print("Starting admin server...")
+        subprocess.Popen(['sudo', 'python3', admin_server_path], 
+                        start_new_session=True)
+        
+        print("Admin server started, exiting config server...")
+        
+        # Exit immediately
+        os._exit(0)
+        
+    except Exception as e:
+        print(f"Error setting up admin server: {str(e)}")
+        raise e
+
 # Define route for the main page ('/')
 @app.route('/')
 def index():
@@ -242,6 +272,8 @@ network={{
         # Wait for connection with timeout
         print("Waiting for connection...")
         max_attempts = 12
+        connected = False  # Add flag to track connection status
+        
         for attempt in range(max_attempts):
             try:
                 result = subprocess.run(['iwgetid'], capture_output=True, text=True)
@@ -251,19 +283,24 @@ network={{
                     print(f"Successfully connected to {ssid}")
                     # Set up admin server
                     setup_admin_server()
+                    connected = True  # Set flag on successful connection
                     return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
                 
             except Exception as e:
                 print(f"Error checking connection: {str(e)}")
-                if attempt < max_attempts - 1:
-                    print("Retrying connection...")
-                    time.sleep(10)
-                    continue
-                else:
-                    raise
-                
+            
+            time.sleep(5)
+            print(f"Connection attempt {attempt + 1}/{max_attempts}...")
+        
+        # If we get here without returning, connection failed
+        print("Failed to connect to network")
+        return jsonify({
+            'success': False, 
+            'error': 'Failed to connect to network after timeout'
+        }), 500
+            
     except Exception as e:
-        app.logger.error(f"Error in connect_wifi: {str(e)}")
+        print(f"Error in connect_wifi: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def check_ap_running():
@@ -331,36 +368,3 @@ def stop_web_server():
         time.sleep(2)  # Give time for the server to stop
     except Exception as e:
         print(f"Error stopping web server: {str(e)}")
-
-def setup_admin_server():
-    """Setup and start the admin server"""
-    try:
-        print("Setting up admin server...")
-        
-        # Stop any existing web servers
-        print("Stopping existing web servers...")
-        stop_web_server()
-        
-        # Get the current script's directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        admin_dir = os.path.join(current_dir, 'admin')
-        
-        print(f"Starting admin server from {admin_dir}")
-        
-        # Start admin server with full path
-        admin_server_path = os.path.join(admin_dir, 'admin_server.py')
-        
-        # Use nohup to keep the process running after parent exits
-        subprocess.Popen(['sudo', 'nohup', 'python3', admin_server_path, '&'], 
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE)
-        
-        print("Admin server started, waiting to verify...")
-        time.sleep(5)  # Give the server time to start
-        
-        # Stop the current (config) server
-        print("Stopping config server...")
-        os._exit(0)
-        
-    except Exception as e:
-        print(f"Error setting up admin server: {str(e)}")

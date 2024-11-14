@@ -2,24 +2,33 @@ from flask import Flask, render_template, jsonify, request
 import subprocess
 import os
 import logging
-from functools import wraps
+import sys
 
-app = Flask(__name__)
-
-# Configure logging
+# Configure logging to both file and console
 logging.basicConfig(
-    filename='admin_server.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('admin_server.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
+
+# Create Flask app
+app = Flask(__name__)
 
 @app.route('/')
 def admin_panel():
     """Serve the admin panel"""
     try:
+        logging.info("Attempting to serve admin panel")
+        logging.info(f"Current directory: {os.getcwd()}")
+        logging.info(f"Template folder: {app.template_folder}")
+        logging.info(f"Available templates: {os.listdir(app.template_folder)}")
+        
         return render_template('admin.html')
     except Exception as e:
-        app.logger.error(f"Error serving admin panel: {str(e)}")
+        logging.error(f"Error serving admin panel: {str(e)}")
         return f"Error loading admin panel: {str(e)}", 500
 
 @app.route('/api/status')
@@ -41,7 +50,7 @@ def get_status():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    print("Starting admin server...")
-    print(f"Current directory: {os.getcwd()}")
-    print(f"Template folder: {app.template_folder}")
+    logging.info("Starting admin server...")
+    logging.info(f"Current working directory: {os.getcwd()}")
+    logging.info(f"Template folder path: {os.path.join(os.getcwd(), 'templates')}")
     app.run(host='0.0.0.0', port=80)
