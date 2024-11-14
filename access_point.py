@@ -11,7 +11,7 @@ import tty  # For keyboard input
 import atexit
 
 # Constants and Global Variables
-BUTTON_PIN = 2  # GPIO Pin 2
+BUTTON_PIN = 17  # GPIO Pin 17
 WIFI_INTERFACE = 'wlan0'
 AP_SSID = 'PiConfigWiFi'
 AP_PASSWORD = '12345678'

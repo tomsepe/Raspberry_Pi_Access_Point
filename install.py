@@ -60,8 +60,9 @@ def install_packages():
         'dhcpcd5',
         'python3-flask',
         'python3-pip',
-        'net-tools',  # For network utilities like ifconfig
-        'wpasupplicant'  # For WiFi client mode
+        'net-tools',      # For network utilities like ifconfig
+        'wpasupplicant',  # For WiFi client mode
+        'python3-psutil'  # System and process utilities
     ]
     
     try:
@@ -85,14 +86,11 @@ def install_packages():
         if not check_gpio_package():
             print("\nRPI.GPIO not found, attempting to install...")
             try:
-                subprocess.run(['pip3', 'install', 'RPI.GPIO'], check=True)
+                subprocess.run(['apt-get', 'install', '-y', 'python3-rpi.gpio'], check=True)
                 print("Successfully installed RPI.GPIO")
             except subprocess.CalledProcessError as e:
                 print(f"Warning: Could not install RPI.GPIO: {str(e)}")
                 print("GPIO functionality may be limited")
-            
-        print("\nInstalling Python requirements...")
-        subprocess.run(['pip3', 'install', 'psutil'], check=True)
         
         return True
         
