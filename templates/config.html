@@ -290,8 +290,19 @@ Usage:
         </div>
 
         <div class="info-text">
-            <strong>Note:</strong> After connecting, your device will be disconnected from the setup network (shelfWIFI) 
-            as the Raspberry Pi switches to your selected network.
+            <strong>Connection Process:</strong>
+            <ol style="margin-top: 0.5rem; margin-left: 1.2rem;">
+                <li>Select your WiFi network from the scan results or enter it manually</li>
+                <li>Enter your WiFi password</li>
+                <li>Click Connect</li>
+                <li>Wait about 30 seconds while the Raspberry Pi connects to your network</li>
+                <li>Reconnect your device to your home WiFi network</li>
+                <li>Access the admin panel at <strong>http://testpi.local</strong></li>
+            </ol>
+            <p style="margin-top: 0.5rem;">
+                <strong>Note:</strong> Your device will be disconnected from the setup network (shelfWIFI) 
+                when the Raspberry Pi switches to your selected network.
+            </p>
         </div>
     </div>
 
@@ -339,14 +350,7 @@ Usage:
             })
             .then(data => {
                 if (data.success) {
-                    alert('WiFi credentials submitted successfully!\n\n' +
-                          'The Raspberry Pi will now:\n' +
-                          '1. Connect to your network\n' +
-                          '2. Start the admin server\n' +
-                          '3. Be available at http://testpi.local\n\n' +
-                          'Please wait about 30 seconds, then:\n' +
-                          '1. Reconnect to your home WiFi\n' +
-                          '2. Navigate to http://testpi.local');
+                    alert('WiFi credentials submitted successfully! Please wait 30 seconds, then reconnect to your home WiFi.');
                 } else {
                     throw new Error(data.error || 'Unknown error occurred');
                 }
