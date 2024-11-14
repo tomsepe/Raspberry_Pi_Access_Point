@@ -187,10 +187,9 @@ def get_keyboard_input():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
 
-# Register signal handlers and cleanup
+# Register signal handlers
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
-atexit.register(cleanup_ap)
 
 # After imports, before main code
 def setup_gpio():
@@ -260,40 +259,18 @@ def main():
         print("Press 'q' to quit")
         
         while True:
-            # Check for keyboard input
-            if sys.stdin.isatty():  # Only try to read keyboard if we're in a terminal
+            if sys.stdin.isatty():
                 key = get_keyboard_input()
                 if key == 'w':
                     print("\nSetting up access point...")
-                    # Stop admin panel before setting up AP
                     stop_admin_panel()
                     if setup_access_point():
                         print("Access point and web server are ready")
                         print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
                 elif key == 'q':
                     print("\nExiting program...")
-                    cleanup_ap()  # Ensure cleanup runs before exit
+                    cleanup_ap()
                     break
-
-            # GPIO hardware trigger functionality (preserved for future use)
-            # Uncomment to enable button-triggered AP setup
-            '''
-            if not GPIO.input(BUTTON_PIN):
-                start_time = time.time()
-                
-                # Keep checking if button is still pressed
-                while not GPIO.input(BUTTON_PIN):
-                    if time.time() - start_time >= 10:
-                        print("Button held for 10 seconds, setting up access point...")
-                        # Stop admin panel before setting up AP
-                        stop_admin_panel()
-                        if setup_access_point():
-                            print("Access point and web server are ready")
-                            print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
-                        break
-                    time.sleep(0.1)
-            '''
-            
             time.sleep(0.1)
             
     except KeyboardInterrupt:
