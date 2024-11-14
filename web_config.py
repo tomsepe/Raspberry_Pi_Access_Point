@@ -326,9 +326,12 @@ def setup_admin_server():
         # Ensure avahi-daemon is installed
         subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
         
+        # Start admin server in a new process
+        subprocess.Popen(['sudo', 'python3', 'admin_server.py'])
+        
         # Stop the current (config) server
         print("Stopping config server...")
-        os._exit(0)  # This will trigger the admin server to start
+        os._exit(0)
         
     except Exception as e:
         print(f"Error setting up admin server: {str(e)}")

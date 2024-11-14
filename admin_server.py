@@ -4,7 +4,8 @@ import os
 import logging
 from functools import wraps
 
-app = Flask(__name__)
+app = Flask(__name__, 
+           template_folder='admin_templates')
 
 # Configure logging
 logging.basicConfig(
