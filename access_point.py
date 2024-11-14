@@ -29,81 +29,69 @@ def setup_access_point():
             raise PermissionError("This script must be run as root")
 
         print("Stopping network services...")
+        # Kill any existing wireless processes
+        subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
+        subprocess.run(['sudo', 'killall', 'hostapd'], check=False)
+        subprocess.run(['sudo', 'killall', 'dnsmasq'], check=False)
+        
+        # Stop services
         subprocess.run(['sudo', 'systemctl', 'stop', 'NetworkManager'], check=False)
         subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=True)
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'])
+        time.sleep(2)
         
         print("Reconfiguring wireless interface...")
-        # Force interface down and change mode
+        # Force disconnect from any networks
+        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'essid', 'off'], check=False)
+        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Managed'], check=False)
+        
+        # Reset interface completely
         subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=True)
+        time.sleep(1)
+        
+        # Try to force AP mode
+        subprocess.run(['sudo', 'iw', WIFI_INTERFACE, 'set', 'type', 'AP'], check=False)
         subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Master'], check=True)
         time.sleep(2)
         
-        # Unmask and enable hostapd
-        print("Configuring hostapd service...")
-        subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'])
-        subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'])
+        # Rest of your existing configuration code...
         
-        # Backup and configure static IP
-        print("Configuring static IP...")
-        if os.path.exists('/etc/dhcpcd.conf'):
-            subprocess.run(['sudo', 'cp', '/etc/dhcpcd.conf', '/etc/dhcpcd.conf.backup'])
-        
-        dhcpcd_conf = f'''
-interface {WIFI_INTERFACE}
-    static ip_address={AP_IP}/24
-    nohook wpa_supplicant
-'''
-        with open('/etc/dhcpcd.conf', 'w') as f:
-            f.write(dhcpcd_conf)
-        
-        # Configure hostapd
-        print("Configuring hostapd...")
-        hostapd_conf = f'''interface={WIFI_INTERFACE}
-driver=nl80211
-ssid={AP_SSID}
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase={AP_PASSWORD}
-wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
-rsn_pairwise=CCMP'''
-        
-        with open('/etc/hostapd/hostapd.conf', 'w') as f:
-            f.write(hostapd_conf)
-            
-        # Update hostapd default configuration
-        with open('/etc/default/hostapd', 'w') as f:
-            f.write('DAEMON_CONF="/etc/hostapd/hostapd.conf"')
-            
-        # Configure DHCP server (dnsmasq)
-        print("Configuring DHCP server...")
-        dnsmasq_conf = f'''interface={WIFI_INTERFACE}
-dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
-        
-        with open('/etc/dnsmasq.conf', 'w') as f:
-            f.write(dnsmasq_conf)
-            
         # Modified service start sequence
         print("Starting services...")
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=True)
         time.sleep(2)
         
+        # Set IP address directly with ip command
+        subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', WIFI_INTERFACE], check=True)
+        subprocess.run(['sudo', 'ip', 'addr', 'add', f'{AP_IP}/24', 'dev', WIFI_INTERFACE], check=True)
+        time.sleep(1)
+        
         subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
         time.sleep(2)
         
-        # Start hostapd with more verbose output
+        # Start hostapd with debug output
         print("Starting hostapd...")
-        subprocess.run(['sudo', 'hostapd', '-B', '/etc/hostapd/hostapd.conf'], check=True)
+        try:
+            hostapd_output = subprocess.run(
+                ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
+                capture_output=True,
+                text=True,
+                timeout=5  # Wait up to 5 seconds for startup
+            )
+            print("Hostapd debug output:", hostapd_output.stdout)
+            if hostapd_output.returncode != 0:
+                print("Hostapd error output:", hostapd_output.stderr)
+        except subprocess.TimeoutExpired:
+            # This is actually expected as hostapd should keep running
+            pass
+        
         time.sleep(2)
+        
+        # Start dnsmasq after hostapd is confirmed running
+        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
         
         # Verify hostapd is running
         result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
