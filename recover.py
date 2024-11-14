@@ -28,8 +28,11 @@ def recover_system():
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'])
         
+        # Restart RPD desktop environment
+        print("Restarting desktop environment...")
+        subprocess.run(['sudo', 'systemctl', 'restart', 'raspberrypi-ui-mods'])
+        
         print("System recovered to normal networking state")
-        print("You may need to reboot the system if the desktop environment isn't working correctly")
         
     except Exception as e:
         print(f"Recovery error: {str(e)}")
