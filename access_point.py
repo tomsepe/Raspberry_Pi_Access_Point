@@ -59,84 +59,73 @@ def setup_access_point():
         time.sleep(1)
         
         # Ensure hostapd is unmasked and enabled
+        print("Configuring hostapd...")
         subprocess.run(['sudo', 'systemctl', 'unmask', 'hostapd'], check=False)
         subprocess.run(['sudo', 'systemctl', 'enable', 'hostapd'], check=False)
         
+        # Start dhcpcd first
+        print("Starting dhcpcd...")
         subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
         time.sleep(2)
         
-        # Start hostapd as a service instead of direct
+        # Start hostapd with more detailed error checking
         print("Starting hostapd...")
         try:
-            hostapd_output = subprocess.run(
-                ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
-                capture_output=True,
-                text=True,
-                timeout=5  # Wait up to 5 seconds for startup
-            )
-            print("Hostapd debug output:", hostapd_output.stdout)
-            if hostapd_output.returncode != 0:
-                print("Hostapd error output:", hostapd_output.stderr)
-        except subprocess.TimeoutExpired:
-            # This is actually expected as hostapd should keep running
-            pass
-        
-        time.sleep(2)
-        
-        # Start dnsmasq after hostapd is confirmed running
-        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
-        
-        # Verify hostapd is running
-        result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
-        if 'hostapd' not in result.stdout:
-            print("Warning: hostapd process not found")
-            return False
-            
-        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
-        
-        # Double-check interface mode
-        print("Verifying access point mode...")
-        time.sleep(2)
-        result = subprocess.run(['iwconfig', WIFI_INTERFACE], capture_output=True, text=True)
-        if "Mode:Master" not in result.stdout:
-            print("Warning: Access point mode not active")
-            print("Interface status:", result.stdout)
-            # Try one more time to force mode
-            subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Master'], check=True)
-            time.sleep(1)
-            result = subprocess.run(['iwconfig', WIFI_INTERFACE], capture_output=True, text=True)
-            if "Mode:Master" not in result.stdout:
-                print("Warning: Access point mode not active")
-                print("Interface status:", result.stdout)
+            # First check if hostapd is installed
+            check_hostapd = subprocess.run(['which', 'hostapd'], capture_output=True, text=True)
+            if not check_hostapd.stdout:
+                print("Error: hostapd not found. Please ensure it's installed.")
                 return False
+
+            # Check hostapd configuration
+            print("Checking hostapd configuration...")
+            config_test = subprocess.run(['sudo', 'hostapd', '-t', '/etc/hostapd/hostapd.conf'], 
+                                      capture_output=True, text=True)
+            if config_test.returncode != 0:
+                print("Error in hostapd configuration:")
+                print(config_test.stderr)
+                return False
+
+            # Try starting hostapd service
+            print("Starting hostapd service...")
+            subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True)
+            time.sleep(2)
+
+            # Verify hostapd is running
+            status = subprocess.run(['sudo', 'systemctl', 'status', 'hostapd'], 
+                                 capture_output=True, text=True)
             
-        print("Access point setup complete!")
-        print(f"SSID: {AP_SSID}")
-        print(f"Password: {AP_PASSWORD}")
-        print(f"IP Address: {AP_IP}")
-        
-        # Launch web configuration server
-        print("Starting web configuration server...")
-        try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            web_config_path = os.path.join(current_dir, 'web_config.py')
+            if 'active (running)' not in status.stdout:
+                print("Failed to start hostapd. Service status:")
+                print(status.stdout)
+                
+                # Try starting hostapd directly for more debug info
+                print("\nAttempting to start hostapd directly with debug output...")
+                direct_start = subprocess.run(
+                    ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
+                    capture_output=True,
+                    text=True
+                )
+                print("Hostapd debug output:")
+                print(direct_start.stdout)
+                print("Hostapd error output:")
+                print(direct_start.stderr)
+                return False
+
+            print("Hostapd started successfully")
             
-            # Use subprocess to run web_config.py
-            web_process = subprocess.Popen(['sudo', 'python3', web_config_path])
+            # Start dnsmasq after hostapd is confirmed running
+            print("Starting dnsmasq...")
+            subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
             
-            # Store the process ID for later cleanup
-            global web_server_process
-            web_server_process = web_process
-            
-            print("Web configuration server started successfully")
-            print("You can now connect to http://192.168.4.1")
             return True
-        except Exception as e:
-            print(f"Failed to start web configuration server: {str(e)}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"Error starting hostapd: {str(e)}")
             return False
-    except Exception as e:
-        print(f"Error: {e}")
-        return False
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return False
 
 def cleanup_ap():
     """Restore original network configuration"""
@@ -261,6 +250,39 @@ def stop_admin_panel():
     except Exception as e:
         print(f"Error stopping admin panel service: {str(e)}")
         return False
+
+def verify_hostapd_config():
+    """Verify hostapd configuration file exists and has correct content"""
+    config_path = '/etc/hostapd/hostapd.conf'
+    
+    if not os.path.exists(config_path):
+        print(f"Creating hostapd configuration file at {config_path}")
+        config_content = f"""
+interface={WIFI_INTERFACE}
+driver=nl80211
+ssid={AP_SSID}
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase={AP_PASSWORD}
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+"""
+        try:
+            with open('hostapd.conf', 'w') as f:
+                f.write(config_content)
+            subprocess.run(['sudo', 'mv', 'hostapd.conf', config_path], check=True)
+            subprocess.run(['sudo', 'chmod', '600', config_path], check=True)
+            return True
+        except Exception as e:
+            print(f"Error creating hostapd configuration: {str(e)}")
+            return False
+    return True
 
 # Main Program
 def main():
