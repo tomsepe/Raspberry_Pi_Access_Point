@@ -10,7 +10,7 @@
 
     <h2>System Components</h2>
     <ol>
-        <li><code>accessPoint.py</code>: Main script that sets up the WiFi access point</li>
+        <li><code>access_point.py</code>: Main script that sets up the WiFi access point</li>
         <li><code>web_config.py</code>: Web server that provides the configuration interface</li>
         <li><code>config.html</code>: Web interface template for WiFi configuration</li>
         <li><code>admin/admin_server.py</code>: Admin interface server that runs after configuration</li>
@@ -21,13 +21,13 @@
     
     <h3>1. Initial Setup</h3>
     <ul>
-        <li>Run the main script: <code>sudo python3 accessPoint.py</code></li>
+        <li>Run the main script: <code>sudo python3 access_point.py</code></li>
         <li>The script monitors GPIO Pin 2 for button press</li>
         <li>Hold the button for 10 seconds to initiate setup</li>
     </ul>
 
     <h3>2. Access Point Creation</h3>
-    <p>When triggered, <code>accessPoint.py</code>:</p>
+    <p>When triggered, <code>access_point.py</code>:</p>
     <ul>
         <li>Sets up a WiFi access point named "PiConfigWiFi"</li>
         <li>Configures the network with IP 192.168.4.1</li>
@@ -91,7 +91,7 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
         </li>
         <li>Enable Verbose Logging:
             <pre>
-    # Add to top of accessPoint.py
+    # Add to top of access_point.py
     import logging
     logging.basicConfig(
         level=logging.DEBUG,
@@ -105,7 +105,7 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
         <li>Test Access Point Setup:
             <pre>
     # Run with debug output
-    sudo python3 -v accessPoint.py
+    sudo python3 -v access_point.py
 
     # Monitor system logs
     sudo tail -f /var/log/syslog | grep -E "hostapd|dnsmasq"
@@ -190,8 +190,8 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     <ol>
         <li>Initial Configuration:
             <ul>
-                <li>User presses button → accessPoint.py creates AP</li>
-                <li>accessPoint.py → launches web_config.py</li>
+                <li>User presses button → access_point.py creates AP</li>
+                <li>access_point.py → launches web_config.py</li>
                 <li>User connects to AP → accesses web interface</li>
                 <li>User submits credentials → web_config.py configures WiFi</li>
             </ul>
@@ -200,7 +200,7 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
             <ul>
                 <li>System connects to configured WiFi</li>
                 <li>web_config.py creates and starts pi-admin-panel service</li>
-                <li>Admin interface accessible at http://[hostname].local</li>
+                <li>Admin interface accessible at http://raspberrypi.local</li>
                 <li>Interface shows system status and metrics</li>
             </ul>
         </li>
@@ -265,7 +265,7 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     <h2>Directory Structure</h2>
     <pre>
     project_root/
-    ├── accessPoint.py
+    ├── access_point.py
     ├── web_config.py
     ├── templates/
     │   └── config.html
@@ -285,7 +285,7 @@ sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
     sudo journalctl -u pi-admin-panel -f
 
     # Test admin interface
-    curl -v http://[hostname].local
+    curl -v http://raspberrypi.local
 
     # Check avahi-daemon status
     sudo systemctl status avahi-daemon

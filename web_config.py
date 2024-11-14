@@ -352,7 +352,7 @@ if __name__ == '__main__':
         sys.exit(1)
         
     if not check_ap_running():
-        print("Error: Access point is not configured. Please run accessPoint.py first.")
+        print("Error: Access point is not configured. Please run access_point.py first.")
         sys.exit(1)
     
     print("Starting web configuration server...")
