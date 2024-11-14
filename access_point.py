@@ -28,19 +28,19 @@ def setup_access_point():
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
 
-        # Now disconnect from existing WiFi
-        print("Disconnecting from any existing WiFi networks...")
-        subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=True)
+        print("Stopping network services...")
+        subprocess.run(['sudo', 'systemctl', 'stop', 'NetworkManager'], check=False)
         subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'mask', 'wpa_supplicant'], check=True)  # Prevent automatic restart
-        time.sleep(2)  # Give time for network to disconnect
-
-        # Stop services before configuration
-        print("Stopping services...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'])
+        
+        print("Reconfiguring wireless interface...")
+        # Force interface down and change mode
+        subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
+        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=True)
+        subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Master'], check=True)
+        time.sleep(2)
         
         # Unmask and enable hostapd
         print("Configuring hostapd service...")
@@ -92,7 +92,7 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         with open('/etc/dnsmasq.conf', 'w') as f:
             f.write(dnsmasq_conf)
             
-        # Bring up interface and start services in correct order
+        # Modified service start sequence
         print("Starting services...")
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=True)
         time.sleep(2)
@@ -100,26 +100,34 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
         time.sleep(2)
         
-        subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'])
+        # Start hostapd with more verbose output
+        print("Starting hostapd...")
+        subprocess.run(['sudo', 'hostapd', '-B', '/etc/hostapd/hostapd.conf'], check=True)
         time.sleep(2)
         
-        # Check hostapd status
-        result = subprocess.run(['sudo', 'systemctl', 'status', 'hostapd'], capture_output=True, text=True)
-        if "active (running)" not in result.stdout:
-            print("Warning: hostapd service not running properly")
-            print("hostapd status:", result.stdout)
+        # Verify hostapd is running
+        result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+        if 'hostapd' not in result.stdout:
+            print("Warning: hostapd process not found")
             return False
             
         subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
         
-        # Verify AP is broadcasting
-        print("Verifying access point...")
+        # Double-check interface mode
+        print("Verifying access point mode...")
         time.sleep(2)
         result = subprocess.run(['iwconfig', WIFI_INTERFACE], capture_output=True, text=True)
         if "Mode:Master" not in result.stdout:
             print("Warning: Access point mode not active")
             print("Interface status:", result.stdout)
-            return False
+            # Try one more time to force mode
+            subprocess.run(['sudo', 'iwconfig', WIFI_INTERFACE, 'mode', 'Master'], check=True)
+            time.sleep(1)
+            result = subprocess.run(['iwconfig', WIFI_INTERFACE], capture_output=True, text=True)
+            if "Mode:Master" not in result.stdout:
+                print("Warning: Access point mode not active")
+                print("Interface status:", result.stdout)
+                return False
             
         print("Access point setup complete!")
         print(f"SSID: {AP_SSID}")
