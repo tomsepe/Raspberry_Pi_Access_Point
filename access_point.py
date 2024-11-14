@@ -8,47 +8,25 @@ import json
 import psutil
 import termios
 import tty  # For keyboard input
-import argparse  # Add this at the top with other imports
 import atexit
 
-# GPIO setup
+# Constants and Global Variables
 BUTTON_PIN = 2  # GPIO Pin 2
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-# Should define constants at top of file
 WIFI_INTERFACE = 'wlan0'
 AP_SSID = 'PiConfigWiFi'
 AP_PASSWORD = '12345678'
 AP_IP = '192.168.4.1'
 
-# Add global variable for web server process
+# Global process tracking
 web_server_process = None
 
-# Add this before the main() function
-def parse_args():
-    parser = argparse.ArgumentParser(description='Raspberry Pi Access Point Setup')
-    parser.add_argument('--skip-requirements', action='store_true',
-                      help='Skip checking and installing required packages')
-    return parser.parse_args()
-
+# Core AP Functions
 def setup_access_point():
     """Configure the Raspberry Pi as a WiFi access point"""
     try:
         # Check for root privileges
         if os.geteuid() != 0:
             raise PermissionError("This script must be run as root")
-
-        args = parse_args()  # Get command line arguments
-        
-        # Only check requirements if not skipped
-        if not args.skip_requirements:
-            # Install required packages first while we still have internet
-            print("Checking and installing required packages...")
-            subprocess.run(['sudo', 'apt-get', 'update'])
-            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'hostapd', 'dnsmasq', 'dhcpcd5'])
-        else:
-            print("Skipping requirements check...")
 
         # Now disconnect from existing WiFi
         print("Disconnecting from any existing WiFi networks...")
@@ -151,8 +129,11 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
         # Launch web configuration server
         print("Starting web configuration server...")
         try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            web_config_path = os.path.join(current_dir, 'web_config.py')
+            
             # Use subprocess to run web_config.py
-            web_process = subprocess.Popen(['sudo', 'python3', 'web_config.py'])
+            web_process = subprocess.Popen(['sudo', 'python3', web_config_path])
             
             # Store the process ID for later cleanup
             global web_server_process
@@ -179,33 +160,37 @@ def cleanup_ap():
                 web_server_process.terminate()
                 web_server_process.wait(timeout=5)
             except:
-                pass
+                # If normal termination fails, force kill
+                try:
+                    subprocess.run(['sudo', 'pkill', '-f', 'web_config.py'], check=False)
+                except:
+                    pass
             web_server_process = None
 
         # Stop AP services
-        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
-        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
+        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
         
         # Restore original configuration files
         if os.path.exists('/etc/dhcpcd.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'])
+            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'], check=False)
         
         if os.path.exists('/etc/dnsmasq.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'])
+            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'], check=False)
             
-        # Restore wpa_supplicant without affecting display manager
-        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
-        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
-        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
+        # Restore wpa_supplicant
+        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
         
         # Reset network interface
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'])
+        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=False)
         time.sleep(1)
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'])
+        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=False)
         
-        # Restart only networking services
-        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
-        subprocess.run(['sudo', 'systemctl', 'restart', 'networking'])
+        # Restart networking services
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
         
         # Clean up GPIO safely
         try:
@@ -218,21 +203,20 @@ def cleanup_ap():
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
 
-# Add this to handle program exit
+# Signal and Status Handling
 def signal_handler(signum, frame):
     """Handle cleanup on program termination"""
     print("\nReceived termination signal. Cleaning up...")
     cleanup_ap()
     sys.exit(0)
 
-# Register the signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
 def update_status(status):
     """Write status to shared file"""
-    with open('wifi_status.json', 'w') as f:
-        json.dump(status, f)
+    try:
+        with open('logs/wifi_status.json', 'w') as f:
+            json.dump(status, f)
+    except Exception as e:
+        print(f"Error updating status: {str(e)}")
 
 def is_web_server_running():
     """Check if web server is already running"""
@@ -252,11 +236,42 @@ def get_keyboard_input():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
 
-# Register cleanup function to run at exit
+# Register signal handlers and cleanup
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 atexit.register(cleanup_ap)
 
+# After imports, before main code
+def setup_gpio():
+    """Initialize GPIO settings"""
+    try:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        return True
+    except Exception as e:
+        print(f"Error setting up GPIO: {str(e)}")
+        return False
+
+def stop_admin_panel():
+    """Stop the admin panel service if it's running"""
+    try:
+        print("Checking for running admin panel service...")
+        if os.path.exists('/etc/systemd/system/pi-admin-panel.service'):
+            print("Stopping admin panel service...")
+            subprocess.run(['sudo', 'systemctl', 'stop', 'pi-admin-panel'], check=True)
+            print("Admin panel service stopped")
+            return True
+    except Exception as e:
+        print(f"Error stopping admin panel service: {str(e)}")
+        return False
+
+# Main Program
 def main():
     try:
+        if not setup_gpio():
+            print("Failed to setup GPIO")
+            sys.exit(1)
+            
         print("Press 'w' to setup access point (or hold GPIO Pin 2 for hardware trigger)")
         print("Press 'q' to quit")
         
@@ -266,6 +281,8 @@ def main():
                 key = get_keyboard_input()
                 if key == 'w':
                     print("\nSetting up access point...")
+                    # Stop admin panel before setting up AP
+                    stop_admin_panel()
                     if setup_access_point():
                         print("Access point and web server are ready")
                         print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
@@ -274,9 +291,9 @@ def main():
                     cleanup_ap()  # Ensure cleanup runs before exit
                     break
 
-            # GPIO input check (commented out but preserved)
+            # GPIO hardware trigger functionality (preserved for future use)
+            # Uncomment to enable button-triggered AP setup
             '''
-             # Check if button is pressed (PIN is LOW)
             if not GPIO.input(BUTTON_PIN):
                 start_time = time.time()
                 
@@ -284,6 +301,8 @@ def main():
                 while not GPIO.input(BUTTON_PIN):
                     if time.time() - start_time >= 10:
                         print("Button held for 10 seconds, setting up access point...")
+                        # Stop admin panel before setting up AP
+                        stop_admin_panel()
                         if setup_access_point():
                             print("Access point and web server are ready")
                             print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")

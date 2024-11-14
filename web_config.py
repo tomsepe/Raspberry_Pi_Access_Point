@@ -52,13 +52,15 @@ import signal
 
 # Configure logging
 logging.basicConfig(
-    filename='wifi_config.log',
+    filename='logs/wifi_config.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
 # Create Flask application instance
-app = Flask(__name__)
+app = Flask(__name__, 
+    template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+)
 
 def setup_admin_server():
     """Setup and start the admin server"""
@@ -68,8 +70,14 @@ def setup_admin_server():
         # Get the current script's directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
         admin_dir = os.path.join(current_dir, 'admin')
-        admin_server_path = os.path.join(admin_dir, 'admin_server.py')
         
+        if not os.path.exists(admin_dir):
+            raise FileNotFoundError(f"Admin directory not found: {admin_dir}")
+            
+        admin_server_path = os.path.join(admin_dir, 'admin_server.py')
+        if not os.path.exists(admin_server_path):
+            raise FileNotFoundError(f"Admin server script not found: {admin_server_path}")
+            
         # Create systemd service file
         service_content = f'''[Unit]
 Description=Pi Admin Panel
@@ -114,66 +122,14 @@ WantedBy=multi-user.target
 # Define route for the main page ('/')
 @app.route('/')
 def index():
+    """Serve the main configuration page"""
     if not os.path.exists('/etc/hostapd/hostapd.conf'):
-        return "Error: Access point is not configured. Please run accessPoint.py first.", 500
+        return "Error: Access point is not configured. Please run access_point.py first.", 500
     try:
         return render_template('config.html')
-    except:
-        # Fallback HTML if template is missing
-        return '''
-        <html>
-            <head>
-                <title>WiFi Configuration</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 40px; }
-                    .container { max-width: 600px; margin: 0 auto; }
-                    .form-group { margin-bottom: 15px; }
-                    input { width: 100%; padding: 8px; margin-top: 5px; }
-                    button { padding: 10px 20px; background: #007bff; color: white; border: none; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>WiFi Configuration</h1>
-                    <div class="form-group">
-                        <label for="ssid">Network Name:</label>
-                        <input type="text" id="ssid" name="ssid" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password:</label>
-                        <input type="password" id="password" name="password" required>
-                    </div>
-                    <button onclick="submitForm()">Connect</button>
-                    <div id="status"></div>
-                </div>
-                <script>
-                    function submitForm() {
-                        const ssid = document.getElementById('ssid').value;
-                        const password = document.getElementById('password').value;
-                        
-                        fetch('/connect', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                ssid: ssid,
-                                password: password
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            document.getElementById('status').innerText = 
-                                data.success ? 'Connected successfully!' : 'Error: ' + data.error;
-                        })
-                        .catch(error => {
-                            document.getElementById('status').innerText = 'Error: ' + error;
-                        });
-                    }
-                </script>
-            </body>
-        </html>
-        '''
+    except Exception as e:
+        logging.error(f"Error rendering template: {str(e)}")
+        return "Error: Could not load configuration page. Check logs for details.", 500
 
 # Define route for network scanning endpoint
 @app.route('/scan_networks')
@@ -273,11 +229,21 @@ network={{
             print("   Interface down, wpa_supplicant killed")
             
             print("\n5. Starting wireless services...")
-            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
+            # First stop any existing wpa_supplicant processes
+            subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=False)
+            time.sleep(1)
+            
+            # Start wpa_supplicant manually with specific interface
+            print("   Starting wpa_supplicant manually...")
+            subprocess.run([
+                'sudo', 
+                'wpa_supplicant',
+                '-B',  # Run in background
+                '-i', 'wlan0',  # Specify interface
+                '-c', '/etc/wpa_supplicant/wpa_supplicant.conf'  # Specify config file
+            ], check=True)
             time.sleep(2)
-            print("   wpa_supplicant service started")
+            print("   wpa_supplicant started")
             
             print("\n6. Bringing up interface...")
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
@@ -288,10 +254,16 @@ network={{
             time.sleep(2)
             print("   DHCP client restarted")
             
-            # Add wpa_cli reconfigure
-            print("\n8. Reconfiguring wpa_supplicant...")
-            subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=True)
-            print("   wpa_supplicant reconfigured")
+            # Now try wpa_cli reconfigure
+            print("\n8. Checking wpa_supplicant status...")
+            # Check if wpa_supplicant is running
+            wpa_status = subprocess.run(['sudo', 'wpa_cli', 'status'], capture_output=True, text=True)
+            print(f"   wpa_supplicant status: {wpa_status.stdout}")
+            
+            if wpa_status.returncode == 0:
+                print("   Reconfiguring wpa_supplicant...")
+                subprocess.run(['sudo', 'wpa_cli', 'reconfigure'], check=True)
+                print("   wpa_supplicant reconfigured")
             
         except Exception as e:
             print(f"   Error in network reconfiguration: {str(e)}")
@@ -356,6 +328,38 @@ def check_requirements():
             return False
     return True
 
+def verify_connection(ssid):
+    """Verify successful connection to network"""
+    try:
+        result = subprocess.run(['iwgetid'], capture_output=True, text=True)
+        return ssid in result.stdout
+    except:
+        return False
+
+def get_ap_status():
+    """Read status from shared file"""
+    try:
+        with open('logs/wifi_status.json', 'r') as f:
+            return json.load(f)
+    except:
+        return {'status': 'unknown'}
+
+def signal_handler(signum, frame):
+    """Handle cleanup on web server termination"""
+    print("\nWeb server shutting down...")
+    sys.exit(0)
+
+def stop_web_server():
+    """Stop any running web servers on port 80"""
+    try:
+        subprocess.run(['sudo', 'fuser', '-k', '80/tcp'], check=False)
+        time.sleep(2)  # Give time for the server to stop
+    except Exception as e:
+        print(f"Error stopping web server: {str(e)}")
+
+# Register signal handlers
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 # Then your main execution block
 if __name__ == '__main__':
     if not check_requirements():
@@ -369,34 +373,3 @@ if __name__ == '__main__':
     print("Starting web configuration server...")
     app.run(host='0.0.0.0', port=80, debug=True)
 
-def verify_connection(ssid):
-    """Verify successful connection to network"""
-    try:
-        result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-        return ssid in result.stdout
-    except:
-        return False
-
-def get_ap_status():
-    """Read status from shared file"""
-    try:
-        with open('wifi_status.json', 'r') as f:
-            return json.load(f)
-    except:
-        return {'status': 'unknown'}
-
-def signal_handler(signum, frame):
-    """Handle cleanup on web server termination"""
-    print("\nWeb server shutting down...")
-    sys.exit(0)
-
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
-
-def stop_web_server():
-    """Stop any running web servers on port 80"""
-    try:
-        subprocess.run(['sudo', 'fuser', '-k', '80/tcp'], check=False)
-        time.sleep(2)  # Give time for the server to stop
-    except Exception as e:
-        print(f"Error stopping web server: {str(e)}")
