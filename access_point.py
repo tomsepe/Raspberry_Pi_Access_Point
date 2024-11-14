@@ -161,28 +161,16 @@ def cleanup_ap():
         time.sleep(1)
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=False)
         
-        # Restore network services in correct order
-        print("Restoring network services...")
-        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
-        time.sleep(1)
-        
+        # Restore network services
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
         time.sleep(1)
         
-        # Start NetworkManager if it exists
+        # Add NetworkManager restart
         subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
         time.sleep(1)
         
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
         
-        # Clean up GPIO safely
-        try:
-            GPIO.cleanup()
-        except:
-            pass
-            
         print("Cleanup completed. Original network configuration restored.")
         print("Network services should be restored within a few seconds.")
         
