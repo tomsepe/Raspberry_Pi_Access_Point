@@ -214,38 +214,84 @@ Usage:
                 color: #ffd866;
             }
         }
+
+        .scan-section {
+            background-color: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .connect-section {
+            padding: 1.5rem;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+
+        /* Update dark mode for new sections */
+        @media (prefers-color-scheme: dark) {
+            .scan-section,
+            .connect-section {
+                background-color: #363636;
+            }
+            
+            input::placeholder {
+                color: #888;
+            }
+        }
+
+        /* Make the scan button more prominent */
+        .scan-button {
+            background-color: #007bff;
+            margin: 1rem 0;
+        }
+
+        .scan-button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Add some spacing between sections */
+        .section-break {
+            margin: 2rem 0;
+            border-top: 2px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Connect to your WiFi network</h1>
+        <h1>WiFi Setup</h1>
         
-        <form id="wifi-form">
-            <div class="form-group">
-                <label for="ssid">Enter your Network Name:</label>
-                <input type="text" id="ssid" name="ssid">
-            </div>
-            <div class="form-group">
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password">
-            </div>
-            <button type="submit">Submit</button>
-        </form>
-
-        <div class="info-text">
-            <strong>Note:</strong> After submitting, the Raspberry Pi will attempt to connect to your WiFi network. 
-            This will disconnect you from the current network (shelfWIFI) as the device switches to your home network.
-        </div>
-
-        <div class="section-break">
-            <h2>Scan for nearby networks</h2>
+        <div class="scan-section">
+            <h2>Find your WiFi network</h2>
             <button onclick="scanNetworks()" class="scan-button">Scan for Networks</button>
             <div class="form-group">
-                <label for="network-select">Select the WiFi network you want to connect to:</label>
+                <label for="network-select">Available networks:</label>
                 <select id="network-select" disabled>
                     <option value="">-- Select a network --</option>
                 </select>
             </div>
+        </div>
+
+        <div class="section-break"></div>
+
+        <div class="connect-section">
+            <h2>Connect to network</h2>
+            <form id="wifi-form">
+                <div class="form-group">
+                    <label for="ssid">Network Name:</label>
+                    <input type="text" id="ssid" name="ssid" placeholder="Select from above or type manually">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" placeholder="Enter network password">
+                </div>
+                <button type="submit">Connect</button>
+            </form>
+        </div>
+
+        <div class="info-text">
+            <strong>Note:</strong> After connecting, your device will be disconnected from the setup network (shelfWIFI) 
+            as the Raspberry Pi switches to your selected network.
         </div>
     </div>
 
