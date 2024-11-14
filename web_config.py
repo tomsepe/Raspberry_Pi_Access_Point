@@ -153,6 +153,7 @@ def scan_networks():
 @app.route('/connect', methods=['POST'])
 def connect_wifi():
     try:
+        print("Starting WiFi connection process...")
         data = request.get_json()
         
         # Validate input data
@@ -162,22 +163,31 @@ def connect_wifi():
         ssid = data.get('ssid')
         password = data.get('password')
         
-        # Validate SSID and password
-        if not ssid:
-            return jsonify({'success': False, 'error': 'Network name (SSID) is required'}), 400
-        if not password or len(password) < 8:
-            return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
-            
+        print(f"Attempting to connect to network: {ssid}")
+        
         try:
+            # Turn off WiFi
+            print("Turning off WiFi...")
+            subprocess.run(['sudo', 'rfkill', 'block', 'wifi'], check=True)
+            time.sleep(2)
+            
+            # Turn WiFi back on
+            print("Turning WiFi back on...")
+            subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
+            time.sleep(2)
+            
             # Stop AP services
+            print("Stopping AP services...")
             subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
             
             # Unmask and enable wpa_supplicant
+            print("Configuring wpa_supplicant...")
             subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
             subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
             
             # Create wpa_supplicant configuration
+            print("Writing wpa_supplicant configuration...")
             wpa_supplicant_conf = f'''ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 country=US
@@ -193,13 +203,15 @@ network={{
                 f.write(wpa_supplicant_conf)
             
             # Restart networking services
+            print("Restarting network services...")
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
-            time.sleep(1)
+            time.sleep(2)
             subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
             subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'], check=True)
             subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
             
-            time.sleep(5)  # Give some time for connection to establish
+            print("Waiting for connection...")
+            time.sleep(10)  # Give more time for connection
             
             # Check if connection was successful
             result = subprocess.run(['iwgetid'], capture_output=True, text=True)

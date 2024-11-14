@@ -24,90 +24,228 @@ Usage:
 <html>
 <head>
     <title>WiFi Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        :root {
+            --primary-color: #4CAF50;
+            --hover-color: #45a049;
+            --warning-bg: #fff3cd;
+            --warning-border: #ffeeba;
+            --warning-text: #856404;
+            --border-color: #ddd;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 100%;
+            background-color: #f5f5f5;
+        }
+
+        .container {
             max-width: 600px;
             margin: 0 auto;
-            padding: 20px;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 1rem;
+            color: #444;
+        }
+
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 1.5rem;
         }
+
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #555;
         }
+
         input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .info-text {
-            background-color: #fff3cd;
-            border: 1px solid #ffeeba;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-            color: #856404;
-        }
-        .section-break {
-            margin: 40px 0 20px 0;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }
-        .scan-button {
-            margin-bottom: 25px;
-        }
+        input[type="password"],
         select {
             width: 100%;
-            padding: 8px;
-            margin-top: 8px;
-            margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 0.8rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--hover-color);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .info-text {
+            background-color: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 8px;
+            color: var(--warning-text);
+        }
+
+        .section-break {
+            margin: 2rem 0 1.5rem 0;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.5rem;
+        }
+
+        .scan-button {
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            h2 {
+                font-size: 1.2rem;
+            }
+
+            button {
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* iPhone SE and smaller devices */
+        @media (max-width: 375px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.3rem;
+            }
+
+            input[type="text"],
+            input[type="password"],
+            select {
+                padding: 0.7rem;
+            }
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #1a1a1a;
+                color: #fff;
+            }
+
+            .container {
+                background-color: #2d2d2d;
+            }
+
+            h1, h2 {
+                color: #fff;
+            }
+
+            input[type="text"],
+            input[type="password"],
+            select {
+                background-color: #3d3d3d;
+                color: #fff;
+                border-color: #4d4d4d;
+            }
+
+            .info-text {
+                background-color: #2c2a1c;
+                border-color: #423f2a;
+                color: #ffd866;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Connect to your WiFi network</h1>
-    
-    <form id="wifi-form">
-        <div class="form-group">
-            <label for="ssid">Enter your Network Name:</label>
-            <input type="text" id="ssid" name="ssid">
-        </div>
-        <div class="form-group">
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password">
-        </div>
-        <button type="submit">Submit</button>
-    </form>
+    <div class="container">
+        <h1>Connect to your WiFi network</h1>
+        
+        <form id="wifi-form">
+            <div class="form-group">
+                <label for="ssid">Enter your Network Name:</label>
+                <input type="text" id="ssid" name="ssid">
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password">
+            </div>
+            <button type="submit">Submit</button>
+        </form>
 
-    <div class="info-text">
-        <strong>Note:</strong> After submitting, the Raspberry Pi will attempt to connect to your WiFi network. 
-        This will disconnect you from the current network (shelfWIFI) as the device switches to your home network.
-    </div>
+        <div class="info-text">
+            <strong>Note:</strong> After submitting, the Raspberry Pi will attempt to connect to your WiFi network. 
+            This will disconnect you from the current network (shelfWIFI) as the device switches to your home network.
+        </div>
 
-    <div class="section-break">
-        <h2>Scan for nearby networks</h2>
-        <button onclick="scanNetworks()" class="scan-button">Scan for Networks</button>
-        <div class="form-group">
-            <label for="network-select">Select the WiFi network you want to connect to:</label>
-            <select id="network-select" disabled>
-                <option value="">-- Select a network --</option>
-            </select>
+        <div class="section-break">
+            <h2>Scan for nearby networks</h2>
+            <button onclick="scanNetworks()" class="scan-button">Scan for Networks</button>
+            <div class="form-group">
+                <label for="network-select">Select the WiFi network you want to connect to:</label>
+                <select id="network-select" disabled>
+                    <option value="">-- Select a network --</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -147,13 +285,15 @@ Usage:
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.json().then(data => {
+                        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                    });
                 }
                 return response.json();
             })
             .then(data => {
                 if (data.success) {
-                    alert('WiFi credentials submitted successfully. The Raspberry Pi will now attempt to connect to your network. Please wait a few moments while the connection is established.');
+                    alert('WiFi credentials submitted successfully. The Raspberry Pi will now attempt to connect to your network.\n\nPlease wait a few moments while the connection is established.\n\nIf you don\'t see your Pi reconnect to your network within 30 seconds, you may need to reboot it.');
                 } else {
                     throw new Error(data.error || 'Unknown error occurred');
                 }
