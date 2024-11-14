@@ -370,6 +370,8 @@ Usage:
             const select = document.getElementById('network-select');
             const scanButton = document.querySelector('.scan-button');
             
+            console.log('Starting network scan...');
+            
             // Show loading state
             select.disabled = true;
             scanButton.disabled = true;
@@ -378,12 +380,14 @@ Usage:
             
             fetch('/scan_networks')
                 .then(response => {
+                    console.log('Received response:', response.status);
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json();
                 })
                 .then(data => {
+                    console.log('Scan results:', data);
                     if (data.networks && data.networks.length > 0) {
                         select.innerHTML = '<option value="">-- Select a network --</option>';
                         data.networks.forEach(network => {
@@ -397,6 +401,7 @@ Usage:
                     }
                 })
                 .catch(error => {
+                    console.error('Scan error:', error);
                     alert('Error scanning networks: ' + error.message);
                     select.innerHTML = '<option value="">-- Select a network --</option>';
                 })

@@ -50,11 +50,14 @@ import json
 import time
 import signal
 
-# Configure logging
+# Configure logging to both file and console
 logging.basicConfig(
-    filename='logs/wifi_config.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,  # Change to DEBUG level
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/wifi_config.log'),
+        logging.StreamHandler(sys.stdout)  # Add console output
+    ]
 )
 
 # Create Flask application instance
@@ -134,43 +137,49 @@ def index():
 # Define route for network scanning endpoint
 @app.route('/scan_networks')
 def scan_networks():
+    """Scan for available WiFi networks"""
+    app.logger.debug("Scan networks endpoint called")  # Add debug logging
     try:
         # First, ensure interface is up and ready
+        app.logger.debug("Bringing up wlan0 interface...")
         subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
-        time.sleep(1)  # Give interface time to come up
+        time.sleep(1)
         
         # Try scanning up to 3 times
         for attempt in range(3):
             try:
-                print(f"Scanning attempt {attempt + 1}...")
+                app.logger.debug(f"Scan attempt {attempt + 1}")
                 # Use iwlist for scanning
-                result = subprocess.run(['sudo', 'iwlist', 'wlan0', 'scan'], 
-                                     capture_output=True, 
-                                     text=True,
-                                     check=True)
+                result = subprocess.run(
+                    ['sudo', 'iwlist', 'wlan0', 'scan'], 
+                    capture_output=True, 
+                    text=True,
+                    check=True
+                )
                 
                 networks = []
+                app.logger.debug(f"Raw scan output: {result.stdout}")  # Log raw output
+                
                 for line in result.stdout.split('\n'):
                     if 'ESSID:' in line:
-                        # Extract SSID and remove quotes
                         ssid = line.split('ESSID:')[1].strip().strip('"')
                         if ssid and ssid != '\\x00' and ssid not in networks:
                             networks.append(ssid)
                 
+                app.logger.debug(f"Found networks: {networks}")  # Log found networks
                 return jsonify({'success': True, 'networks': networks})
                 
             except subprocess.CalledProcessError as e:
-                print(f"Scan attempt {attempt + 1} failed: {str(e)}")
-                if attempt < 2:  # If not the last attempt
-                    print("Waiting before retry...")
-                    time.sleep(2)  # Wait before retrying
+                app.logger.error(f"Scan attempt {attempt + 1} failed: {str(e)}")
+                if attempt < 2:
+                    app.logger.debug("Waiting before retry...")
+                    time.sleep(2)
                     continue
                 else:
-                    raise  # Re-raise on final attempt
+                    raise
                     
     except Exception as e:
         error_msg = f"Error scanning networks: {str(e)}"
-        print(error_msg)
         app.logger.error(error_msg)
         return jsonify({'success': False, 'error': error_msg}), 500
 
@@ -369,6 +378,16 @@ if __name__ == '__main__':
         print("Error: Access point is not configured. Please run access_point.py first.")
         sys.exit(1)
     
+    # Create logs directory if it doesn't exist
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+    
     print("Starting web configuration server...")
+    # Disable Flask's default logging
+    app.logger.handlers = []
+    app.logger.propagate = False
+    # Use our custom logger
+    app.logger.handlers.extend(logging.getLogger().handlers)
+    
     app.run(host='0.0.0.0', port=80, debug=True)
 
