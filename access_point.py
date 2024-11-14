@@ -135,6 +135,37 @@ def setup_access_point():
             # Start dnsmasq after hostapd is confirmed running
             print("Starting dnsmasq...")
             subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
+
+            # Start web configuration server
+            print("\nStarting web configuration server...")
+            try:
+                global web_server_process
+                if web_server_process:
+                    web_server_process.terminate()
+                    web_server_process = None
+                
+                web_server_process = subprocess.Popen(
+                    ['sudo', 'python3', 'web_config.py'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                time.sleep(2)  # Give the web server time to start
+                
+                # Check if web server is running
+                if web_server_process.poll() is None:
+                    print("Web configuration server started successfully")
+                else:
+                    stdout, stderr = web_server_process.communicate()
+                    print("Error starting web server:")
+                    print("stdout:", stdout.decode())
+                    print("stderr:", stderr.decode())
+                    return False
+                    
+                return True
+                
+            except Exception as e:
+                print(f"Error starting web server: {str(e)}")
+                return False
             
             return True
 
