@@ -129,33 +129,17 @@ def setup_access_point():
 
 def cleanup_ap():
     """Restore original network configuration"""
-    print("Cleaning up access point configuration...")
     try:
         # Stop web server if running
         global web_server_process
         if web_server_process:
-            try:
-                web_server_process.terminate()
-                web_server_process.wait(timeout=5)
-            except:
-                # If normal termination fails, force kill
-                try:
-                    subprocess.run(['sudo', 'pkill', '-f', 'web_config.py'], check=False)
-                except:
-                    pass
+            web_server_process.terminate()
             web_server_process = None
 
         # Stop AP services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
         
-        # Restore original configuration files
-        if os.path.exists('/etc/dhcpcd.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'], check=False)
-        
-        if os.path.exists('/etc/dnsmasq.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'], check=False)
-            
         # Reset network interface
         subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=False)
         time.sleep(1)
@@ -163,20 +147,12 @@ def cleanup_ap():
         
         # Restore network services
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
-        time.sleep(1)
-        
-        # Add NetworkManager restart
         subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
-        time.sleep(1)
-        
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
         
-        print("Cleanup completed. Original network configuration restored.")
-        print("Network services should be restored within a few seconds.")
-        
+        print("Cleanup completed")
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
-        return False
 
 # Signal and Status Handling
 def signal_handler(signum, frame):
