@@ -9,6 +9,7 @@ import psutil
 import termios
 import tty  # For keyboard input
 import atexit
+import select  # Add this with other imports
 
 # Constants and Global Variables
 BUTTON_PIN = 17  # GPIO Pin 17
@@ -321,18 +322,21 @@ def main():
         
         while True:
             if sys.stdin.isatty():
-                key = get_keyboard_input()
-                if key == 'w':
-                    print("\nSetting up access point...")
-                    stop_admin_panel()
-                    if setup_access_point():
-                        print("Access point and web server are ready")
-                        print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
-                elif key == 'q':
-                    print("\nExiting program...")
-                    cleanup_ap()
-                    break
-            time.sleep(0.1)
+                if select.select([sys.stdin], [], [], 0.1)[0]:  # Non-blocking input check
+                    key = get_keyboard_input()
+                    if key == 'w':
+                        print("\nSetting up access point...")
+                        stop_admin_panel()
+                        if setup_access_point():
+                            print("Access point and web server are ready")
+                            print("Connect to 'PiConfigWiFi' network and visit http://192.168.4.1")
+                            # After starting the web server, continue monitoring for 'q' key
+                            continue
+                    elif key == 'q':
+                        print("\nExiting program...")
+                        cleanup_ap()
+                        break
+            time.sleep(0.1)  # Short sleep to prevent CPU hogging
             
     except KeyboardInterrupt:
         print("\nProgram terminated by user")
