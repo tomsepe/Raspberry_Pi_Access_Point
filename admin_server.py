@@ -13,35 +13,18 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Basic auth decorator
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
-
-def check_auth(username, password):
-    """Check if username/password combination is valid"""
-    # TODO: Implement proper authentication
-    return username == 'admin' and password == 'password'
-
-def authenticate():
-    """Send 401 response that enables basic auth"""
-    return ('Could not verify your access level for that URL.\n'
-            'You have to login with proper credentials', 401,
-            {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
 @app.route('/')
-@require_auth
 def admin_panel():
-    return render_template('admin.html')
+    """Serve the admin panel"""
+    try:
+        return render_template('admin.html')
+    except Exception as e:
+        app.logger.error(f"Error serving admin panel: {str(e)}")
+        return f"Error loading admin panel: {str(e)}", 500
 
 @app.route('/api/status')
-@require_auth
 def get_status():
+    """Get system status"""
     try:
         # Get system status
         wifi_status = subprocess.check_output(['iwconfig', 'wlan0']).decode()
@@ -58,5 +41,5 @@ def get_status():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    # Run the server on port 80 with SSL
-    app.run(host='0.0.0.0', port=80, ssl_context='adhoc')
+    # Make sure we're not using the same port as the config server
+    app.run(host='0.0.0.0', port=80)

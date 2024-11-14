@@ -339,7 +339,14 @@ Usage:
             })
             .then(data => {
                 if (data.success) {
-                    alert('WiFi credentials submitted successfully. The Raspberry Pi will now attempt to connect to your network.\n\nPlease wait a few moments while the connection is established.\n\nIf you don\'t see your Pi reconnect to your network within 30 seconds, you may need to reboot it.');
+                    alert('WiFi credentials submitted successfully!\n\n' +
+                          'The Raspberry Pi will now:\n' +
+                          '1. Connect to your network\n' +
+                          '2. Start the admin server\n' +
+                          '3. Be available at http://testpi.local\n\n' +
+                          'Please wait about 30 seconds, then:\n' +
+                          '1. Reconnect to your home WiFi\n' +
+                          '2. Navigate to http://testpi.local');
                 } else {
                     throw new Error(data.error || 'Unknown error occurred');
                 }

@@ -234,6 +234,9 @@ network={{
             # Check if connection was successful
             result = subprocess.run(['iwgetid'], capture_output=True, text=True)
             if ssid in result.stdout:
+                # Set up admin server
+                setup_admin_server()
+                
                 return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
             else:
                 return jsonify({'success': False, 'error': 'Failed to connect to network'}), 500
@@ -316,29 +319,16 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-def setup_hostname():
-    """Configure the Raspberry Pi hostname"""
+def setup_admin_server():
+    """Setup and start the admin server"""
     try:
-        # Install avahi-daemon if not present
+        print("Setting up admin server...")
+        # Ensure avahi-daemon is installed
         subprocess.run(['sudo', 'apt-get', 'install', '-y', 'avahi-daemon'], check=True)
         
-        # Set hostname
-        with open('/etc/hostname', 'w') as f:
-            f.write('shelf\n')
-        
-        # Update hosts file
-        with open('/etc/hosts', 'r') as f:
-            hosts = f.readlines()
-        
-        with open('/etc/hosts', 'w') as f:
-            for line in hosts:
-                if '127.0.1.1' in line:
-                    f.write('127.0.1.1\tshelf\n')
-                else:
-                    f.write(line)
-        
-        # Restart hostname service
-        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'])
+        # Stop the current (config) server
+        print("Stopping config server...")
+        os._exit(0)  # This will trigger the admin server to start
         
     except Exception as e:
-        print(f"Error setting up hostname: {str(e)}")
+        print(f"Error setting up admin server: {str(e)}")
