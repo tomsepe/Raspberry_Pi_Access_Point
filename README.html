@@ -6,13 +6,15 @@
 <body>
     <h1>Raspberry Pi Access Point Configuration System</h1>
 
-    <p>This system provides a simple way to configure WiFi settings on a Raspberry Pi through a web interface. It creates a temporary access point that users can connect to for configuring their WiFi credentials.</p>
+    <p>This system provides a way to reset and reconfigure a Raspberry Pi's WiFi settings using a physical button. When the button is pressed for 10 seconds, the system creates a temporary WiFi access point named "PiConfigWiFi". Users can then connect to this access point and visit http://192.168.4.1 to access a web interface where they can configure the Raspberry Pi to connect to their local WiFi network. Once configured, the system switches to the new network and provides an admin interface at http://[hostname].local for monitoring system status.</p>
 
     <h2>System Components</h2>
     <ol>
         <li><code>accessPoint.py</code>: Main script that sets up the WiFi access point</li>
         <li><code>web_config.py</code>: Web server that provides the configuration interface</li>
         <li><code>config.html</code>: Web interface template for WiFi configuration</li>
+        <li><code>admin/admin_server.py</code>: Admin interface server that runs after configuration</li>
+        <li><code>admin/templates/admin.html</code>: Admin panel interface template</li>
     </ol>
 
     <h2>How It Works</h2>
@@ -27,14 +29,14 @@
     <h3>2. Access Point Creation</h3>
     <p>When triggered, <code>accessPoint.py</code>:</p>
     <ul>
-        <li>Sets up a WiFi access point named "shelfWIFI"</li>
+        <li>Sets up a WiFi access point named "PiConfigWiFi"</li>
         <li>Configures the network with IP 192.168.4.1</li>
         <li>Automatically launches the web configuration server</li>
     </ul>
 
     <h3>3. Web Configuration</h3>
     <ul>
-        <li>Connect to the "shelfWIFI" network</li>
+        <li>Connect to the "PiConfigWiFi" network</li>
         <li>Navigate to http://192.168.4.1 in your web browser</li>
         <li>The configuration page provides two options:
             <ul>
@@ -57,9 +59,25 @@ sudo pip3 install psutil</pre>
         <li>Required System Packages:
             <pre>
 sudo apt-get update
-sudo apt-get install hostapd dnsmasq</pre>
+sudo apt-get install hostapd dnsmasq avahi-daemon</pre>
         </li>
     </ul>
+
+    <h2>System Services</h2>
+    <h3>Admin Server Service</h3>
+    <p>The system creates a systemd service for the admin interface:</p>
+    <pre>
+    # Service file location
+    /etc/systemd/system/shelf-admin.service
+
+    # Service management commands
+    sudo systemctl status shelf-admin    # Check service status
+    sudo systemctl start shelf-admin     # Start service
+    sudo systemctl stop shelf-admin      # Stop service
+    sudo systemctl restart shelf-admin   # Restart service
+    sudo systemctl enable shelf-admin    # Enable on boot
+    sudo journalctl -u shelf-admin       # View service logs
+    </pre>
 
     <h2>Debugging and Testing</h2>
 
@@ -67,18 +85,18 @@ sudo apt-get install hostapd dnsmasq</pre>
     <ol>
         <li>Enable Flask Debug Mode:
             <pre>
-# In web_config.py, modify the app.run() line:
-if __name__ == '__main__':
-    app.run(host='192.168.4.1', port=80, debug=True)</pre>
+    # In web_config.py, modify the app.run() line:
+    if __name__ == '__main__':
+        app.run(host='192.168.4.1', port=80, debug=True)</pre>
         </li>
         <li>Enable Verbose Logging:
             <pre>
-# Add to top of accessPoint.py
-import logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='access_point.log')</pre>
+    # Add to top of accessPoint.py
+    import logging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        filename='access_point.log')</pre>
         </li>
     </ol>
 
@@ -86,14 +104,14 @@ logging.basicConfig(
     <ol>
         <li>Test Access Point Setup:
             <pre>
-# Run with debug output
-sudo python3 -v accessPoint.py
+    # Run with debug output
+    sudo python3 -v accessPoint.py
 
-# Monitor system logs
-sudo tail -f /var/log/syslog | grep -E "hostapd|dnsmasq"
+    # Monitor system logs
+    sudo tail -f /var/log/syslog | grep -E "hostapd|dnsmasq"
 
-# Check network interface
-iwconfig wlan0</pre>
+    # Check network interface
+    iwconfig wlan0</pre>
         </li>
     </ol>
 
@@ -136,74 +154,73 @@ iwconfig wlan0</pre>
     <ol>
         <li>Access Point Not Starting:
             <pre>
-# Check hostapd status
-sudo systemctl status hostapd
+    # Check hostapd status
+    sudo systemctl status hostapd
 
-# Test hostapd configuration
-sudo hostapd -dd /etc/hostapd/hostapd.conf</pre>
+    # Test hostapd configuration
+    sudo hostapd -dd /etc/hostapd/hostapd.conf</pre>
         </li>
         <li>Web Server Issues:
             <pre>
-# Check if port 80 is available
-sudo netstat -tulpn | grep :80
+    # Check if port 80 is available
+    sudo netstat -tulpn | grep :80
 
-# Test Flask server response
-curl -v http://192.168.4.1</pre>
+    # Test Flask server response
+    curl -v http://192.168.4.1</pre>
         </li>
         <li>Network Scanning Problems:
             <pre>
-# Manual network scan
-sudo iwlist wlan0 scan
+    # Manual network scan
+    sudo iwlist wlan0 scan
 
-# Check wireless interface status
-rfkill list all</pre>
+    # Check wireless interface status
+    rfkill list all</pre>
         </li>
     </ol>
 
     <h2>Debug Environment Variables</h2>
     <pre>
-export FLASK_ENV=development
-export FLASK_DEBUG=1
-export PYTHONVERBOSE=1</pre>
+    export FLASK_ENV=development
+    export FLASK_DEBUG=1
+    export PYTHONVERBOSE=1</pre>
 
     <h2>System Workflow</h2>
     
-    <h3>Script Interaction</h3>
+    <h3>System Workflow</h3>
     <ol>
-        <li><code>accessPoint.py</code> (Primary Script):
+        <li>Initial Configuration:
             <ul>
-                <li>Monitors GPIO button</li>
-                <li>Sets up access point</li>
-                <li>Launches web server automatically</li>
-                <li>Handles cleanup on exit</li>
+                <li>User presses button → accessPoint.py creates AP</li>
+                <li>accessPoint.py → launches web_config.py</li>
+                <li>User connects to AP → accesses web interface</li>
+                <li>User submits credentials → web_config.py configures WiFi</li>
             </ul>
         </li>
-        <li><code>web_config.py</code> (Web Server):
+        <li>Admin Interface:
             <ul>
-                <li>Launched by accessPoint.py</li>
-                <li>Serves configuration interface</li>
-                <li>Handles network scanning</li>
-                <li>Processes WiFi credentials</li>
-            </ul>
-        </li>
-        <li><code>config.html</code> (User Interface):
-            <ul>
-                <li>Provides user input forms</li>
-                <li>Handles network scanning requests</li>
-                <li>Shows connection status</li>
-                <li>Provides feedback to user</li>
+                <li>System connects to configured WiFi</li>
+                <li>web_config.py creates and starts shelf-admin service</li>
+                <li>Admin interface accessible at http://testpi.local</li>
+                <li>Interface shows system status and metrics</li>
             </ul>
         </li>
     </ol>
 
-    <h3>Data Flow</h3>
-    <ol>
-        <li>User presses button → accessPoint.py creates AP</li>
-        <li>accessPoint.py → launches web_config.py</li>
-        <li>User connects to AP → accesses web interface</li>
-        <li>User submits credentials → web_config.py configures WiFi</li>
-        <li>System transitions to new network</li>
-    </ol>
+    <h2>Admin Interface Features</h2>
+    <ul>
+        <li>Real-time system monitoring:
+            <ul>
+                <li>CPU usage and temperature</li>
+                <li>Memory utilization</li>
+                <li>Disk space information</li>
+                <li>Network status and WiFi details</li>
+                <li>System uptime</li>
+            </ul>
+        </li>
+        <li>Responsive design for mobile and desktop</li>
+        <li>Auto-refreshing metrics (every 5 seconds)</li>
+        <li>Visual indicators for system health</li>
+    </ul>
 
     <h2>Configuration Files</h2>
     <ul>
@@ -242,6 +259,35 @@ export PYTHONVERBOSE=1</pre>
         <li>Flask documentation</li>
         <li>Raspberry Pi networking guides</li>
     </ul>
+
+    <h2>Directory Structure</h2>
+    <pre>
+    project_root/
+    ├── accessPoint.py
+    ├── web_config.py
+    ├── templates/
+    │   └── config.html
+    ├── admin/
+    │   ├── admin_server.py
+    │   └── templates/
+    │       └── admin.html
+    └── README.html
+    </pre>
+
+    <h3>Admin Server Debugging</h3>
+    <pre>
+    # Check admin server status
+    sudo systemctl status shelf-admin
+
+    # View admin server logs
+    sudo journalctl -u shelf-admin -f
+
+    # Test admin interface
+    curl -v http://testpi.local
+
+    # Check avahi-daemon status
+    sudo systemctl status avahi-daemon
+    </pre>
 
 </body>
 </html>
