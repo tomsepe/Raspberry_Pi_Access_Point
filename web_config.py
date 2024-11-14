@@ -226,22 +226,28 @@ network={{
             subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
             time.sleep(2)
 
-            print("\n4. Reconfiguring network interface...")
-            subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=True)  # Clear old IP
+            print("\n4. Starting NetworkManager...")
+            subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=True)
+            time.sleep(2)
+
+            print("\n5. Reconfiguring network interface...")
+            subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=True)
             subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
             time.sleep(2)
 
-            print("\n5. Starting wireless services...")
+            print("\n6. Starting wireless services...")
+            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
             subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
-            time.sleep(1)
+            time.sleep(2)
 
             # Start DHCP client to get new IP
-            print("\n6. Requesting IP address...")
-            subprocess.run(['sudo', 'dhclient', '-v', 'wlan0'], check=True)
+            print("\n7. Requesting IP address...")
+            subprocess.run(['sudo', 'systemctl', 'restart', 'NetworkManager'], check=True)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
             time.sleep(5)  # Give time for IP assignment
 
-            print("\n7. Checking connection status...")
+            print("\n8. Checking connection status...")
             max_attempts = 30
             connected = False
             
@@ -258,7 +264,7 @@ network={{
                         capture_output=True, text=True).stdout:
                         
                         # Test internet connectivity
-                        print("\n8. Testing internet connection...")
+                        print("\n9. Testing internet connection...")
                         for ping_attempt in range(3):
                             print(f"   Ping attempt {ping_attempt + 1}/3...")
                             ping_test = subprocess.run(

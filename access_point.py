@@ -84,25 +84,28 @@ def cleanup_ap():
             web_server_process.terminate()
             web_server_process = None
 
-        # Stop AP services
+        print("Stopping AP services...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
         
-        # Reset network interface
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'], check=False)
-        time.sleep(1)
-        
-        # Start necessary services in correct order
-        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
-        
-        # Bring interface back up
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=False)
+        print("Resetting network interface...")
+        subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', WIFI_INTERFACE], check=False)
+        subprocess.run(['sudo', 'ip', 'link', 'set', WIFI_INTERFACE, 'down'], check=False)
         time.sleep(2)
         
-        # Final networking restart to ensure everything is working
+        print("Starting network services...")
+        subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=False)
+        time.sleep(2)
+        
+        print("Bringing interface up...")
+        subprocess.run(['sudo', 'ip', 'link', 'set', WIFI_INTERFACE, 'up'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        time.sleep(2)
+        
+        print("Final network restart...")
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'NetworkManager'], check=False)
         
         print("Cleanup completed")
     except Exception as e:
