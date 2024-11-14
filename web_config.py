@@ -253,7 +253,7 @@ network={{
             time.sleep(3)
             
             print("\n7. Checking connection status...")
-            max_attempts = 15
+            max_attempts = 30  # Increase from 15 to 30 attempts
             connected = False
             
             for attempt in range(max_attempts):
@@ -262,27 +262,38 @@ network={{
                     iwconfig = subprocess.run(['iwconfig', 'wlan0'], capture_output=True, text=True)
                     ifconfig = subprocess.run(['ifconfig', 'wlan0'], capture_output=True, text=True)
                     
-                    print(f"\n   Connection check {attempt + 1}:")
+                    print(f"\n   Connection check {attempt + 1}/{max_attempts}:")
                     print(f"   iwconfig output: {iwconfig.stdout.strip()}")
                     print(f"   ifconfig output: {ifconfig.stdout.strip()}")
                     
-                    if ssid in iwconfig.stdout and 'inet ' in ifconfig.stdout:
-                        print(f"\n8. Successfully connected to {ssid}")
-                        
-                        # Test internet connectivity
-                        print("\n9. Testing internet connection...")
-                        ping_test = subprocess.run(['ping', '-c', '1', '8.8.8.8'], capture_output=True)
-                        if ping_test.returncode == 0:
-                            print("   Internet connection successful")
-                            connected = True
-                            break
-                        else:
-                            print("   Warning: Internet connection failed")
+                    if ssid in iwconfig.stdout:
+                        if 'inet ' in ifconfig.stdout:
+                            print(f"\n8. Successfully connected to {ssid}")
                             
+                            # Test internet connectivity with longer timeout
+                            print("\n9. Testing internet connection...")
+                            for ping_attempt in range(3):  # Try ping up to 3 times
+                                print(f"   Ping attempt {ping_attempt + 1}/3...")
+                                ping_test = subprocess.run(
+                                    ['ping', '-c', '1', '-W', '5', '8.8.8.8'],  # 5 second timeout
+                                    capture_output=True
+                                )
+                                if ping_test.returncode == 0:
+                                    print("   Internet connection successful")
+                                    connected = True
+                                    break
+                                time.sleep(2)
+                            
+                            if connected:
+                                break
+                            else:
+                                print("   Warning: Internet connection failed, retrying...")
+                                
                 except Exception as e:
                     print(f"   Error checking connection: {str(e)}")
                 
-                time.sleep(2)
+                print(f"   Waiting for connection... ({attempt + 1}/{max_attempts})")
+                time.sleep(3)  # Increased from 2 to 3 seconds
                 
             if not connected:
                 raise Exception("Failed to establish network connection")
