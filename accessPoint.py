@@ -153,52 +153,32 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h'''
 
 def cleanup_ap():
     """Restore original network configuration"""
+    print("Cleaning up access point configuration...")
+    
     try:
-        print("Cleaning up access point configuration...")
-        
         # Stop services
         subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
         subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
-        
-        # Restore network interface
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'])
-        time.sleep(1)
-        
-        # Restore original configuration files
-        if os.path.exists('/etc/dhcpcd.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dhcpcd.conf.backup', '/etc/dhcpcd.conf'])
-        else:
-            # Write default dhcpcd.conf if backup doesn't exist
-            with open('/etc/dhcpcd.conf', 'w') as f:
-                f.write('''# Default dhcpcd.conf
-hostname
-clientid
-persistent
-option rapid_commit
-option domain_name_servers, domain_name, domain_search, host_name
-option classless_static_routes
-option interface_mtu
-require dhcp_server_identifier
-slaac private''')
-        
-        # Restore dnsmasq if backup exists
-        if os.path.exists('/etc/dnsmasq.conf.backup'):
-            subprocess.run(['sudo', 'mv', '/etc/dnsmasq.conf.backup', '/etc/dnsmasq.conf'])
-        
-        # Enable and restart networking services
-        subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
-        subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
-        subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
-        
-        # Bring interface back up
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
-        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
-        
-        print("Cleanup completed. Network configuration restored.")
-        
     except Exception as e:
-        print(f"Cleanup error: {str(e)}")
-        raise  # Re-raise the exception after printing the error
+        print(f"Error stopping services: {str(e)}")
+    finally:
+        try:
+            # Restore network interface
+            subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'down'])
+            time.sleep(1)
+            
+            # Enable and restart networking services
+            subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'])
+            subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'])
+            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'])
+            
+            # Bring interface back up
+            subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'])
+            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'])
+            
+            print("Network services restored.")
+        except Exception as e:
+            print(f"Error restoring network services: {str(e)}")
 
 # Add this to handle program exit
 def signal_handler(signum, frame):
