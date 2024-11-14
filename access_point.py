@@ -77,24 +77,29 @@ def setup_access_point():
                 print("Error: hostapd not found. Please ensure it's installed.")
                 return False
 
-            # Check hostapd configuration with timeout
-            print("Checking hostapd configuration...")
-            try:
-                config_test = subprocess.run(
-                    ['sudo', 'hostapd', '-t', '/etc/hostapd/hostapd.conf'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5  # Add 5 second timeout
-                )
-                if config_test.returncode != 0:
-                    print("Error in hostapd configuration:")
-                    print(config_test.stderr)
-                    return False
-            except subprocess.TimeoutExpired:
-                print("Hostapd configuration check timed out. Attempting to start anyway...")
+            # Get hostapd service status before starting
+            print("\nChecking hostapd service status:")
+            status_before = subprocess.run(
+                ['sudo', 'systemctl', 'status', 'hostapd'],
+                capture_output=True,
+                text=True
+            )
+            print(status_before.stdout)
+
+            # Check journal logs
+            print("\nChecking hostapd logs:")
+            journal = subprocess.run(
+                ['sudo', 'journalctl', '-u', 'hostapd', '-n', '20'],
+                capture_output=True,
+                text=True
+            )
+            print(journal.stdout)
+
+            # Verify configuration file
+            print("\nVerifying hostapd configuration file:")
+            subprocess.run(['sudo', 'cat', '/etc/hostapd/hostapd.conf'])
             
-            # Try starting hostapd service
-            print("Starting hostapd service...")
+            print("\nAttempting to start hostapd service...")
             try:
                 subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True, timeout=10)
                 time.sleep(2)
@@ -108,13 +113,15 @@ def setup_access_point():
                 )
                 
                 if 'active (running)' not in status.stdout:
-                    print("Failed to start hostapd. Service status:")
+                    print("\nFailed to start hostapd. Current service status:")
                     print(status.stdout)
                     
-                    # Try starting hostapd directly with debug output
-                    print("\nAttempting to start hostapd directly...")
+                    # Try starting hostapd directly for more debug info
+                    print("\nAttempting to start hostapd directly with debug output...")
                     subprocess.run(
                         ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
+                        capture_output=True,
+                        text=True,
                         timeout=5
                     )
                     return False
@@ -234,10 +241,8 @@ def verify_hostapd_config():
     """Verify hostapd configuration file exists and has correct content"""
     config_path = '/etc/hostapd/hostapd.conf'
     
-    if not os.path.exists(config_path):
-        print(f"Creating hostapd configuration file at {config_path}")
-        config_content = f"""
-interface={WIFI_INTERFACE}
+    print(f"\nChecking hostapd configuration at {config_path}")
+    config_content = f"""interface={WIFI_INTERFACE}
 driver=nl80211
 ssid={AP_SSID}
 hw_mode=g
@@ -251,17 +256,30 @@ wpa_passphrase={AP_PASSWORD}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
+country_code=US
 """
-        try:
+    try:
+        if os.path.exists(config_path):
+            print("Configuration file exists, checking content...")
+            with open(config_path, 'r') as f:
+                current_content = f.read()
+            if current_content.strip() != config_content.strip():
+                print("Updating existing configuration...")
+                with open('hostapd.conf', 'w') as f:
+                    f.write(config_content)
+                subprocess.run(['sudo', 'mv', 'hostapd.conf', config_path], check=True)
+        else:
+            print("Creating new configuration file...")
             with open('hostapd.conf', 'w') as f:
                 f.write(config_content)
             subprocess.run(['sudo', 'mv', 'hostapd.conf', config_path], check=True)
-            subprocess.run(['sudo', 'chmod', '600', config_path], check=True)
-            return True
-        except Exception as e:
-            print(f"Error creating hostapd configuration: {str(e)}")
-            return False
-    return True
+            
+        subprocess.run(['sudo', 'chmod', '600', config_path], check=True)
+        print("Configuration file verified/updated successfully")
+        return True
+    except Exception as e:
+        print(f"Error managing hostapd configuration: {str(e)}")
+        return False
 
 # Main Program
 def main():
