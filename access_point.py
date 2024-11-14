@@ -77,43 +77,54 @@ def setup_access_point():
                 print("Error: hostapd not found. Please ensure it's installed.")
                 return False
 
-            # Check hostapd configuration
+            # Check hostapd configuration with timeout
             print("Checking hostapd configuration...")
-            config_test = subprocess.run(['sudo', 'hostapd', '-t', '/etc/hostapd/hostapd.conf'], 
-                                      capture_output=True, text=True)
-            if config_test.returncode != 0:
-                print("Error in hostapd configuration:")
-                print(config_test.stderr)
-                return False
-
+            try:
+                config_test = subprocess.run(
+                    ['sudo', 'hostapd', '-t', '/etc/hostapd/hostapd.conf'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5  # Add 5 second timeout
+                )
+                if config_test.returncode != 0:
+                    print("Error in hostapd configuration:")
+                    print(config_test.stderr)
+                    return False
+            except subprocess.TimeoutExpired:
+                print("Hostapd configuration check timed out. Attempting to start anyway...")
+            
             # Try starting hostapd service
             print("Starting hostapd service...")
-            subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True)
-            time.sleep(2)
+            try:
+                subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True, timeout=10)
+                time.sleep(2)
 
-            # Verify hostapd is running
-            status = subprocess.run(['sudo', 'systemctl', 'status', 'hostapd'], 
-                                 capture_output=True, text=True)
-            
-            if 'active (running)' not in status.stdout:
-                print("Failed to start hostapd. Service status:")
-                print(status.stdout)
-                
-                # Try starting hostapd directly for more debug info
-                print("\nAttempting to start hostapd directly with debug output...")
-                direct_start = subprocess.run(
-                    ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
+                # Verify hostapd is running
+                status = subprocess.run(
+                    ['sudo', 'systemctl', 'status', 'hostapd'],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    timeout=5
                 )
-                print("Hostapd debug output:")
-                print(direct_start.stdout)
-                print("Hostapd error output:")
-                print(direct_start.stderr)
+                
+                if 'active (running)' not in status.stdout:
+                    print("Failed to start hostapd. Service status:")
+                    print(status.stdout)
+                    
+                    # Try starting hostapd directly with debug output
+                    print("\nAttempting to start hostapd directly...")
+                    subprocess.run(
+                        ['sudo', 'hostapd', '-dd', '/etc/hostapd/hostapd.conf'],
+                        timeout=5
+                    )
+                    return False
+                
+                print("Hostapd started successfully")
+                
+            except subprocess.TimeoutExpired:
+                print("Timeout while starting hostapd")
                 return False
 
-            print("Hostapd started successfully")
-            
             # Start dnsmasq after hostapd is confirmed running
             print("Starting dnsmasq...")
             subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
