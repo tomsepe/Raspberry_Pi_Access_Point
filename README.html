@@ -327,6 +327,59 @@ sudo python3 recover.py</pre>
         </li>
     </ol>
 
+    <h2>Running as a System Service</h2>
+    <p>The main access point script can be configured to run automatically at boot using systemd:</p>
+
+    <h3>1. Create Service File</h3>
+    <pre>
+    sudo nano /etc/systemd/system/wifi-config.service
+    </pre>
+
+    <p>Add the following content (adjust paths as needed):</p>
+    <pre>
+    [Unit]
+    Description=WiFi Configuration Service
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/python3 /full/path/to/access_point.py
+    WorkingDirectory=/full/path/to/script/directory
+    User=root
+    Restart=always
+    RestartSec=10
+    StandardOutput=append:/var/log/wifi-config.log
+    StandardError=append:/var/log/wifi-config.log
+
+    [Install]
+    WantedBy=multi-user.target
+    </pre>
+
+    <h3>2. Enable and Start Service</h3>
+    <pre>
+    sudo chmod 644 /etc/systemd/system/wifi-config.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable wifi-config
+    sudo systemctl start wifi-config
+    </pre>
+
+    <h3>Service Management Commands</h3>
+    <ul>
+        <li>Check service status: <code>sudo systemctl status wifi-config</code></li>
+        <li>View service logs: <code>sudo journalctl -u wifi-config</code></li>
+        <li>Stop service: <code>sudo systemctl stop wifi-config</code></li>
+        <li>Restart service: <code>sudo systemctl restart wifi-config</code></li>
+        <li>Disable autostart: <code>sudo systemctl disable wifi-config</code></li>
+    </ul>
+
+    <h3>Notes</h3>
+    <ul>
+        <li>The service runs with root privileges (required for network configuration)</li>
+        <li>Logs are written to both systemd journal and /var/log/wifi-config.log</li>
+        <li>Service automatically restarts if it crashes</li>
+        <li>10-second delay between restart attempts</li>
+        <li>Starts after network services are available</li>
+    </ul>
+
     <h2>Recovery</h2>
     <p>If something goes wrong with the configuration or you need to restore the original network settings:</p>
     <ol>

@@ -219,12 +219,15 @@ def main():
             sys.exit(1)
             
         ap_running = False
-        print("\nPress 'w' to start access point")
-        print("Press GPIO button (Pin 17) to start access point")
-        print("Press 'q' to quit")
+        print("\nWaiting for GPIO button (Pin 17) press to start access point...")
+        
+        # Uncomment the following lines to enable keyboard input
+        # print("Press 'w' to start access point")
+        # print("Press 'q' to quit")
         
         while True:
-            # Simpler keyboard input check
+            # Keyboard input handling (commented out for service mode)
+            """
             if sys.stdin in select.select([sys.stdin], [], [], 0.1)[0]:
                 char = get_keyboard_input()
                 if char == 'w' and not ap_running:
@@ -234,6 +237,7 @@ def main():
                     print("\nShutting down...")
                     cleanup_ap()
                     break
+            """
             
             # Check GPIO button
             if not GPIO.input(BUTTON_PIN) and not ap_running:

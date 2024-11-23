@@ -1,0 +1,15 @@
+[Unit]
+Description=WiFi Configuration Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /full/path/to/access_point.py
+WorkingDirectory=/full/path/to/script/directory
+User=root
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/wifi-config.log
+StandardError=append:/var/log/wifi-config.log
+
+[Install]
+WantedBy=multi-user.target
