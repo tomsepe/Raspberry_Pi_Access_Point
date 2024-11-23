@@ -40,48 +40,31 @@ Date: 11/10/2024
 Version: 1.0
 """
 
-# Import necessary modules
-from flask import Flask, render_template, request, jsonify  # Flask web framework components
-import subprocess  # For running system commands (wifi scanning)
-import os  # For checking file permissions
-import logging
+from flask import Flask, render_template, request, jsonify
+import subprocess
+import os
 import sys
-import json
 import time
-import signal
+import logging
 
-# Configure logging to both file and console
+# Basic logging setup
 logging.basicConfig(
-    level=logging.DEBUG,  # Change to DEBUG level
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/wifi_config.log'),
-        logging.StreamHandler(sys.stdout)  # Add console output
-    ]
+    handlers=[logging.FileHandler('logs/wifi_config.log')]
 )
 
-# Create Flask application instance
-app = Flask(__name__, 
-    template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-)
+app = Flask(__name__)
 
 def setup_admin_server():
-    """Setup and start the admin server"""
+    """Setup and start the admin server as a systemd service"""
     try:
-        print("Setting up admin server...")
-        
-        # Get the current script's directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        admin_dir = os.path.join(current_dir, 'admin')
-        
-        if not os.path.exists(admin_dir):
-            raise FileNotFoundError(f"Admin directory not found: {admin_dir}")
-            
+        admin_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin')
         admin_server_path = os.path.join(admin_dir, 'admin_server.py')
-        if not os.path.exists(admin_server_path):
-            raise FileNotFoundError(f"Admin server script not found: {admin_server_path}")
+        
+        if not all(os.path.exists(p) for p in [admin_dir, admin_server_path]):
+            raise FileNotFoundError("Admin server files not found")
             
-        # Create systemd service file
         service_content = f'''[Unit]
 Description=Pi Admin Panel
 After=network.target
@@ -91,97 +74,62 @@ ExecStart=/usr/bin/python3 {admin_server_path}
 WorkingDirectory={admin_dir}
 User=root
 Restart=always
-RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 '''
         
-        # Write service file
-        service_path = '/etc/systemd/system/pi-admin-panel.service'
         with open('/tmp/pi-admin-panel.service', 'w') as f:
             f.write(service_content)
+            
+        subprocess.run(['sudo', 'mv', '/tmp/pi-admin-panel.service', 
+                       '/etc/systemd/system/pi-admin-panel.service'], check=True)
+        subprocess.run(['sudo', 'chmod', '644', '/etc/systemd/system/pi-admin-panel.service'], 
+                      check=True)
         
-        # Move and set permissions
-        subprocess.run(['sudo', 'mv', '/tmp/pi-admin-panel.service', service_path], check=True)
-        subprocess.run(['sudo', 'chmod', '644', service_path], check=True)
-        
-        print("Enabling and starting admin server service...")
-        # Reload systemd, enable and start service
+        # Enable and start service
         subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=True)
         subprocess.run(['sudo', 'systemctl', 'enable', 'pi-admin-panel'], check=True)
         subprocess.run(['sudo', 'systemctl', 'start', 'pi-admin-panel'], check=True)
         
-        print("Admin server service installed and started")
-        print("Exiting config server...")
-        
-        # Exit immediately
+        logging.info("Admin server installed and started")
         os._exit(0)
         
     except Exception as e:
-        print(f"Error setting up admin server: {str(e)}")
-        raise e
+        logging.error(f"Admin server setup failed: {str(e)}")
+        raise
 
 # Define route for the main page ('/')
 @app.route('/')
 def index():
     """Serve the main configuration page"""
     if not os.path.exists('/etc/hostapd/hostapd.conf'):
-        return "Error: Access point is not configured. Please run access_point.py first.", 500
-    try:
-        return render_template('config.html')
-    except Exception as e:
-        logging.error(f"Error rendering template: {str(e)}")
-        return "Error: Could not load configuration page. Check logs for details.", 500
+        return "Error: Access point not configured. Run access_point.py first.", 500
+    return render_template('config.html')
 
 # Define route for network scanning endpoint
 @app.route('/scan_networks')
 def scan_networks():
     """Scan for available WiFi networks"""
-    app.logger.debug("Scan networks endpoint called")  # Add debug logging
     try:
-        # First, ensure interface is up and ready
-        app.logger.debug("Bringing up wlan0 interface...")
         subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
         time.sleep(1)
         
-        # Try scanning up to 3 times
-        for attempt in range(3):
-            try:
-                app.logger.debug(f"Scan attempt {attempt + 1}")
-                # Use iwlist for scanning
-                result = subprocess.run(
-                    ['sudo', 'iwlist', 'wlan0', 'scan'], 
-                    capture_output=True, 
-                    text=True,
-                    check=True
-                )
-                
-                networks = []
-                app.logger.debug(f"Raw scan output: {result.stdout}")  # Log raw output
-                
-                for line in result.stdout.split('\n'):
-                    if 'ESSID:' in line:
-                        ssid = line.split('ESSID:')[1].strip().strip('"')
-                        if ssid and ssid != '\\x00' and ssid not in networks:
-                            networks.append(ssid)
-                
-                app.logger.debug(f"Found networks: {networks}")  # Log found networks
-                return jsonify({'success': True, 'networks': networks})
-                
-            except subprocess.CalledProcessError as e:
-                app.logger.error(f"Scan attempt {attempt + 1} failed: {str(e)}")
-                if attempt < 2:
-                    app.logger.debug("Waiting before retry...")
-                    time.sleep(2)
-                    continue
-                else:
-                    raise
+        result = subprocess.run(['sudo', 'iwlist', 'wlan0', 'scan'], 
+                              capture_output=True, text=True, check=True)
+        
+        networks = []
+        for line in result.stdout.split('\n'):
+            if 'ESSID:' in line:
+                ssid = line.split('ESSID:"')[1].split('"')[0]
+                if ssid and ssid not in networks:
+                    networks.append(ssid)
                     
+        return jsonify({'success': True, 'networks': sorted(networks)})
+        
     except Exception as e:
-        error_msg = f"Error scanning networks: {str(e)}"
-        app.logger.error(error_msg)
-        return jsonify({'success': False, 'error': error_msg}), 500
+        logging.error(f"Network scan failed: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Define route for WiFi credentials submission
 @app.route('/connect', methods=['POST'])
@@ -192,12 +140,10 @@ def connect_wifi():
         password = data.get('password')
         
         if not ssid or not password:
-            return jsonify({'success': False, 'error': 'Missing SSID or password'}), 400
-            
-        print(f"\n1. Starting connection process to: {ssid}")
-            
-        # Configure WiFi
-        config_text = f'''
+            raise ValueError("Missing SSID or password")
+
+        # Write WPA supplicant configuration
+        wpa_config = f'''
 country=US
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
@@ -206,190 +152,62 @@ network={{
     ssid="{ssid}"
     psk="{password}"
     key_mgmt=WPA-PSK
-    scan_ssid=1
 }}'''
         
-        try:
-            print("\n2. Writing wpa_supplicant configuration...")
-            with open('/etc/wpa_supplicant/wpa_supplicant.conf', 'w') as f:
-                f.write(config_text)
-            subprocess.run(['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
-            print("   Configuration file written successfully")
+        with open('/tmp/wpa_supplicant.conf', 'w') as f:
+            f.write(wpa_config)
             
-        except Exception as e:
-            print(f"   Error writing configuration: {str(e)}")
-            raise e
+        subprocess.run(['sudo', 'mv', '/tmp/wpa_supplicant.conf', 
+                       '/etc/wpa_supplicant/wpa_supplicant.conf'], check=True)
         
-        try:
-            print("\n3. Stopping AP services...")
-            subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-            time.sleep(2)
-
-            print("\n4. Starting NetworkManager...")
-            subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], check=True)
-            time.sleep(2)
-
-            print("\n5. Reconfiguring network interface...")
-            subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=True)
-            subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
-            subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
-            time.sleep(2)
-
-            print("\n6. Starting wireless services...")
-            subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
-            subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
-            time.sleep(2)
-
-            # Start DHCP client to get new IP
-            print("\n7. Requesting IP address...")
-            subprocess.run(['sudo', 'systemctl', 'restart', 'NetworkManager'], check=True)
-            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
-            time.sleep(5)  # Give time for IP assignment
-
-            print("\n8. Checking connection status...")
-            max_attempts = 30
-            connected = False
+        # Stop AP services and connect to WiFi
+        services_to_stop = ['hostapd', 'dnsmasq']
+        for service in services_to_stop:
+            subprocess.run(['sudo', 'systemctl', 'stop', service], check=True)
             
-            for attempt in range(max_attempts):
-                try:
-                    print(f"\n   Connection check {attempt + 1}/{max_attempts}:")
-                    
-                    # Check IP assignment
-                    ip_check = subprocess.run(['ip', 'addr', 'show', 'wlan0'], 
-                                           capture_output=True, text=True)
-                    print(f"   IP configuration: {ip_check.stdout.strip()}")
-                    
-                    if ssid in subprocess.run(['iwgetid'], 
-                        capture_output=True, text=True).stdout:
-                        
-                        # Test internet connectivity
-                        print("\n9. Testing internet connection...")
-                        for ping_attempt in range(3):
-                            print(f"   Ping attempt {ping_attempt + 1}/3...")
-                            ping_test = subprocess.run(
-                                ['ping', '-c', '1', '-W', '5', '8.8.8.8'],
-                                capture_output=True
-                            )
-                            if ping_test.returncode == 0:
-                                print("   Internet connection successful!")
-                                connected = True
-                                break
-                            time.sleep(2)
-                        
-                        if connected:
-                            break
-                            
-                except Exception as e:
-                    print(f"   Error checking connection: {str(e)}")
-                
-                print(f"   Waiting for connection... ({attempt + 1}/{max_attempts})")
-                time.sleep(3)
-
-            if not connected:
-                raise Exception("Failed to establish network connection")
-                
-            print("\n10. Setting up admin server...")
-            setup_admin_server()
-            return jsonify({'success': True, 'message': f'Successfully connected to {ssid}'})
+        # Configure network interface
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
+        time.sleep(1)
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'wpa_supplicant'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
+        
+        # Wait for connection
+        for _ in range(30):
+            result = subprocess.run(['iwgetid'], capture_output=True, text=True)
+            if ssid in result.stdout:
+                # Test internet connectivity
+                ping_test = subprocess.run(['ping', '-c', '1', '-W', '2', '8.8.8.8'])
+                if ping_test.returncode == 0:
+                    setup_admin_server()
+                    return jsonify({'success': True})
+            time.sleep(1)
             
-        except Exception as e:
-            print(f"Error in network configuration: {str(e)}")
-            raise e
-            
+        raise Exception("Failed to establish connection")
+        
     except Exception as e:
-        print(f"\nError in connect_wifi: {str(e)}")
+        logging.error(f"WiFi connection failed: {str(e)}")
         restore_ap_mode()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-def check_ap_running():
-    """Verify that the access point is running"""
-    try:
-        with open('/etc/hostapd/hostapd.conf', 'r') as f:
-            content = f.read()
-            return 'ssid=PiConfigWiFi' in content
-    except:
-        return False
-
-# Add this function before the if __name__ == '__main__': block
-def check_requirements():
-    """Check if required packages are installed"""
-    required_packages = ['flask']
-    for package in required_packages:
-        try:
-            __import__(package)
-        except ImportError:
-            print(f"Missing required package: {package}")
-            return False
-    return True
-
-def verify_connection(ssid):
-    """Verify successful connection to network"""
-    try:
-        result = subprocess.run(['iwgetid'], capture_output=True, text=True)
-        return ssid in result.stdout
-    except:
-        return False
-
-def get_ap_status():
-    """Read status from shared file"""
-    try:
-        with open('logs/wifi_status.json', 'r') as f:
-            return json.load(f)
-    except:
-        return {'status': 'unknown'}
-
-def signal_handler(signum, frame):
-    """Handle cleanup on web server termination"""
-    print("\nWeb server shutting down...")
-    sys.exit(0)
-
-def stop_web_server():
-    """Stop any running web servers on port 80"""
-    try:
-        subprocess.run(['sudo', 'fuser', '-k', '80/tcp'], check=False)
-        time.sleep(2)  # Give time for the server to stop
-    except Exception as e:
-        print(f"Error stopping web server: {str(e)}")
-
 def restore_ap_mode():
-    """Restore access point mode if client connection fails"""
+    """Restore access point mode if connection fails"""
     try:
-        print("\nRestoring access point mode...")
         subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'], check=True)
         subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
-        subprocess.run(['sudo', 'killall', 'wpa_supplicant'], check=False)
-        time.sleep(2)
+        time.sleep(1)
         subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True)
         subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'], check=True)
         subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'], check=True)
-        print("Access point mode restored")
     except Exception as e:
-        print(f"Error restoring AP mode: {str(e)}")
+        logging.error(f"Failed to restore AP mode: {str(e)}")
 
-# Register signal handlers
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
-# Then your main execution block
 if __name__ == '__main__':
-    if not check_requirements():
-        print("Missing required packages. Please install them first.")
-        sys.exit(1)
+    if os.geteuid() != 0:
+        sys.exit("This script must be run as root")
         
-    if not check_ap_running():
-        print("Error: Access point is not configured. Please run access_point.py first.")
-        sys.exit(1)
-    
-    # Create logs directory if it doesn't exist
     if not os.path.exists('logs'):
         os.makedirs('logs')
-    
-    print("Starting web configuration server...")
-    # Disable Flask's default logging
-    app.logger.handlers = []
-    app.logger.propagate = False
-    # Use our custom logger
-    app.logger.handlers.extend(logging.getLogger().handlers)
-    
-    app.run(host='0.0.0.0', port=80, debug=True)
+        
+    app.run(host='0.0.0.0', port=80)
 

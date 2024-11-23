@@ -32,39 +32,27 @@ def setup_access_point():
         # Stop admin panel first to free up port 80
         stop_admin_panel()
         
-        print("Stopping network services...")
-        subprocess.run(['sudo', 'systemctl', 'stop', 'NetworkManager'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'])
-        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'])
-        subprocess.run(['sudo', 'systemctl', 'stop', 'dhcpcd'])
+        # Simplified service management
+        print("Configuring access point...")
+        services_to_stop = ['wpa_supplicant', 'hostapd', 'dnsmasq', 'dhcpcd']
+        for service in services_to_stop:
+            subprocess.run(['sudo', 'systemctl', 'stop', service], check=False)
         time.sleep(2)
         
         print("Setting up wireless interface...")
         subprocess.run(['sudo', 'rfkill', 'unblock', 'wifi'], check=True)
-        subprocess.run(['sudo', 'ifconfig', WIFI_INTERFACE, 'up'], check=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', WIFI_INTERFACE, 'up'], check=True)
         subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', WIFI_INTERFACE], check=True)
         subprocess.run(['sudo', 'ip', 'addr', 'add', f'{AP_IP}/24', 'dev', WIFI_INTERFACE], check=True)
         
-        print("Starting services...")
-        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'])
-        time.sleep(2)
-        
-        # Start hostapd
-        print("Starting hostapd...")
-        verify_hostapd_config()  # Make sure config is correct
+        # Start core services
+        verify_hostapd_config()
         subprocess.run(['sudo', 'systemctl', 'start', 'hostapd'], check=True)
-        time.sleep(2)
-        
-        # Start dnsmasq
-        print("Starting dnsmasq...")
-        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'])
-        
-        # Stop any process using port 80
-        stop_web_server()
+        subprocess.run(['sudo', 'systemctl', 'start', 'dnsmasq'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'dhcpcd'], check=True)
         
         # Start web server
-        print("\nStarting web configuration server...")
+        stop_web_server()
         subprocess.Popen(['sudo', 'python3', 'web_config.py'])
         
         print("\nAccess point and web server are ready")

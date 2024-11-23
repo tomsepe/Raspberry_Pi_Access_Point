@@ -20,74 +20,60 @@ import subprocess
 import os
 import sys
 import time
-import logging
 import shutil
 
-# Configure logging
-logging.basicConfig(
-    filename='logs/recovery.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 def check_root():
-    """Check if script is running with root privileges"""
+    """Check for root privileges"""
     if os.geteuid() != 0:
-        print("This script must be run as root (sudo)")
-        sys.exit(1)
+        sys.exit("This script must be run as root (sudo)")
 
 def restore_network_config():
     """Restore original network configuration files"""
-    try:
-        config_files = [
-            '/etc/dhcpcd.conf',
-            '/etc/dnsmasq.conf',
-            '/etc/hostapd/hostapd.conf'
-        ]
-        
-        for file in config_files:
-            backup_file = f"{file}.backup"
-            if os.path.exists(backup_file):
-                shutil.copy2(backup_file, file)
-                logging.info(f"Restored {file} from backup")
-                print(f"Restored {file}")
-    except Exception as e:
-        logging.error(f"Error restoring config files: {str(e)}")
-        print(f"Error restoring config files: {str(e)}")
+    config_files = [
+        '/etc/dhcpcd.conf',
+        '/etc/dnsmasq.conf',
+        '/etc/hostapd/hostapd.conf'
+    ]
+    
+    for file in config_files:
+        backup_file = f"{file}.backup"
+        if os.path.exists(backup_file):
+            shutil.copy2(backup_file, file)
+            print(f"Restored {file}")
 
 def recover_system():
     """Recover system to normal networking state"""
     try:
-        logging.info("Starting system recovery")
         print("Starting system recovery...\n")
         
+        # 1. Stop and disable AP services
         print("1. Stopping AP services...")
-        # Stop AP services
-        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'disable', 'hostapd'], check=True)
-        subprocess.run(['sudo', 'systemctl', 'disable', 'dnsmasq'], check=True)
+        services_to_manage = ['hostapd', 'dnsmasq']
+        for service in services_to_manage:
+            subprocess.run(['sudo', 'systemctl', 'stop', service], check=False)
+            subprocess.run(['sudo', 'systemctl', 'disable', service], check=False)
         
+        # 2. Restore network configs
         print("\n2. Restoring network configuration...")
         restore_network_config()
         
+        # 3. Enable and start wpa_supplicant
         print("\n3. Restoring wpa_supplicant...")
-        # Restore wpa_supplicant
         subprocess.run(['sudo', 'systemctl', 'unmask', 'wpa_supplicant'], check=True)
         subprocess.run(['sudo', 'systemctl', 'enable', 'wpa_supplicant'], check=True)
         subprocess.run(['sudo', 'systemctl', 'start', 'wpa_supplicant'], check=True)
         
+        # 4. Reset network interface
         print("\n4. Resetting network interface...")
-        # Reset network interface
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'down'], check=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'down'], check=True)
         time.sleep(1)
-        subprocess.run(['sudo', 'ifconfig', 'wlan0', 'up'], check=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'wlan0', 'up'], check=True)
         
+        # 5. Restart network services
         print("\n5. Restarting network services...")
-        # Restart networking
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=True)
         subprocess.run(['sudo', 'systemctl', 'restart', 'networking'], check=True)
-
+""" 
         print("\n6. Ensuring Raspberry Pi Desktop is installed...")
         # Make sure RPD is installed and set as default
         subprocess.run(['sudo', 'apt-get', 'update'], check=True)
@@ -96,7 +82,7 @@ def recover_system():
         print("\n7. Setting Raspberry Pi Desktop as default...")
         # Set RPD as default display manager
         subprocess.run(['sudo', 'update-alternatives', '--set', 'x-session-manager', '/usr/bin/startlxde-pi'], check=True)
-        
+         """
         # Stop admin panel service if it exists
         print("\n8. Cleaning up admin panel service...")
         if os.path.exists('/etc/systemd/system/pi-admin-panel.service'):
@@ -105,15 +91,12 @@ def recover_system():
             subprocess.run(['sudo', 'rm', '/etc/systemd/system/pi-admin-panel.service'], check=False)
             subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
         
-        logging.info("System recovery completed successfully")
         print("\nSystem recovery completed successfully!")
         print("\nIMPORTANT: Please reboot your system to complete the recovery:")
         print("sudo reboot")
         
     except Exception as e:
-        logging.error(f"Recovery error: {str(e)}")
         print(f"\nRecovery error: {str(e)}")
-        print("\nPlease check logs/recovery.log for details")
         sys.exit(1)
 
 if __name__ == "__main__":
