@@ -4,7 +4,6 @@ title: Raspberry Pi Access Point Configuration System
 
 # Raspberry Pi Access Point Configuration System
 
-11/22/24
 This system provides a way to reset and reconfigure a Raspberry Pi\'s
 WiFi settings using a physical button. When the button is pressed for 10
 seconds, the system creates a temporary WiFi access point named
@@ -302,6 +301,61 @@ Created with assistance from Cursor AI, powered by Anthropic\'s Claude
     -   Set correct permissions
     -   Backup existing network configurations
     -   Create log directory
+
+## Running as a System Service
+
+The main access point script can be configured to run automatically at
+boot using systemd:
+
+### 1. Create Service File
+
+        sudo nano /etc/systemd/system/wifi-config.service
+        
+
+Add the following content (adjust paths as needed):
+
+        [Unit]
+        Description=WiFi Configuration Service
+        After=network.target
+
+        [Service]
+        ExecStart=/usr/bin/python3 /full/path/to/access_point.py
+        WorkingDirectory=/full/path/to/script/directory
+        User=root
+        Restart=always
+        RestartSec=10
+        StandardOutput=append:/var/log/wifi-config.log
+        StandardError=append:/var/log/wifi-config.log
+
+        [Install]
+        WantedBy=multi-user.target
+        
+
+### 2. Enable and Start Service
+
+        sudo chmod 644 /etc/systemd/system/wifi-config.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable wifi-config
+        sudo systemctl start wifi-config
+        
+
+### Service Management Commands
+
+-   Check service status: `sudo systemctl status wifi-config`
+-   View service logs: `sudo journalctl -u wifi-config`
+-   Stop service: `sudo systemctl stop wifi-config`
+-   Restart service: `sudo systemctl restart wifi-config`
+-   Disable autostart: `sudo systemctl disable wifi-config`
+
+### Notes
+
+-   The service runs with root privileges (required for network
+    configuration)
+-   Logs are written to both systemd journal and
+    /var/log/wifi-config.log
+-   Service automatically restarts if it crashes
+-   10-second delay between restart attempts
+-   Starts after network services are available
 
 ## Recovery
 
