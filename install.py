@@ -62,7 +62,9 @@ def install_packages():
         'python3-pip',
         'net-tools',      # For network utilities like ifconfig
         'wpasupplicant',  # For WiFi client mode
-        'python3-psutil'  # System and process utilities
+        'python3-psutil', # System and process utilities
+        'lsof',           # For checking port usage
+        'psmisc'          # Contains fuser for killing processes on ports
     ]
     
     try:
