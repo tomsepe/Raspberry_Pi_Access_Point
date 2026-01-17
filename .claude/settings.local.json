@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start https://brave.com/search/api)"
+    ]
+  }
+}
